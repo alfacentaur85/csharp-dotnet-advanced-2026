@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace EventServiceApi.Dtos;
+namespace EventServiceApi.Dto;
 
 /// <summary>
 /// DTO для создания/обновления мероприятия.
@@ -8,10 +8,10 @@ namespace EventServiceApi.Dtos;
 public class EventCreateUpdateDto : IValidatableObject
 {
     /// <summary>
-    /// Заголовок мероприятие.
+    /// Заголовок мероприятия.
     /// </summary>
-    [Required(ErrorMessage = "Title обязателен.")]
-    [MinLength(1, ErrorMessage = "Title не может быть пустым.")]
+    [Required(ErrorMessage = "Заголовок обязателен.")]
+    [MinLength(1, ErrorMessage = "Заголовок не может быть пустым.")]
     public string Title { get; set; } = string.Empty;
 
     /// <summary>
@@ -22,24 +22,27 @@ public class EventCreateUpdateDto : IValidatableObject
     /// <summary>
     /// Дата и время начала мероприятия.
     /// </summary>
-    [Required(ErrorMessage = "StartAt обязателен.")]
-    public DateTime StartAt { get; set; }
+    [Required(ErrorMessage = "Дата начала обязательна.")]
+    public DateTime? StartAt { get; set; }
 
     /// <summary>
     /// Дата и время окончания мероприятия.
     /// </summary>
-    [Required(ErrorMessage = "EndAt обязателен.")]
-    public DateTime EndAt { get; set; }
+    [Required(ErrorMessage = "Дата окончания обязательна.")]
+    public DateTime? EndAt { get; set; }
 
     /// <summary>
     /// Кросс-полевая валидация: EndAt должен быть позже StartAt.
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        if (StartAt == null || EndAt == null)
+            yield break;
+
         if (EndAt <= StartAt)
         {
             yield return new ValidationResult(
-                "EndAt должен быть позже StartAt.",
+                "Дата окончания должна быть позже даты начала.",
                 new[] { nameof(EndAt), nameof(StartAt) });
         }
     }

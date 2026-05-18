@@ -1,3 +1,4 @@
+using EventServiceApi.Dto;
 using EventServiceApi.Models;
 
 namespace EventServiceApi.Interfaces;
@@ -24,7 +25,7 @@ public interface IEventService
     /// </summary>
     /// <param name="evt">Мероприятие.</param>
     /// <returns>Созданное мероприятие.</returns>
-    Event Create(Event evt);
+    Event Create(EventCreateUpdateDto evt);
 
     /// <summary>
     /// Полностью обновить мероприятие по идентификатору.
@@ -32,7 +33,7 @@ public interface IEventService
     /// <param name="id">Идентификатор мероприятия.</param>
     /// <param name="evt">Новые данные мероприятия (Id игнорируется).</param>
     /// <returns>True если обновлено, иначе false.</returns>
-    bool Update(Guid id, Event evt);
+    bool Update(Guid id, EventCreateUpdateDto evt);
 
     /// <summary>
     /// Удалить мероприятие по идентификатору.

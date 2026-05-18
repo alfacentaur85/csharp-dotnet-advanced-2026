@@ -1,4 +1,4 @@
-using EventServiceApi.Dtos;
+using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -22,15 +22,24 @@ public class EventsController : ControllerBase
         _eventService = eventService;
     }
 
+    private static EventResponseDto ToResponseDto(Event evt) => new()
+    {
+        Id = evt.Id,
+        Title = evt.Title,
+        Description = evt.Description,
+        StartAt = evt.StartAt,
+        EndAt = evt.EndAt
+    };
+
     /// <summary>
     /// Получить список всех мероприятий.
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<Event>), StatusCodes.Status200OK)]
-    public ActionResult<IEnumerable<Event>> GetAll()
+    [ProducesResponseType(typeof(IEnumerable<EventResponseDto>), StatusCodes.Status200OK)]
+    public ActionResult<IEnumerable<EventResponseDto>> GetAll()
     {
         var events = _eventService.GetAll();
-        return Ok(events);
+        return Ok(events.Select(ToResponseDto));
     }
 
     /// <summary>
@@ -38,42 +47,35 @@ public class EventsController : ControllerBase
     /// </summary>
     /// <param name="id">Идентификатор мероприятия.</param>
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(Event), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<Event> GetById(Guid id)
+    public ActionResult<EventResponseDto> GetById(Guid id)
     {
         var evt = _eventService.GetById(id);
         if (evt is null)
             return NotFound();
 
-        return Ok(evt);
+        return Ok(ToResponseDto(evt));
     }
 
     /// <summary>
     /// Создать мероприятие.
     /// </summary>
     [HttpPost]
-    [ProducesResponseType(typeof(Event), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult<Event> Create([FromBody] EventCreateUpdateDto dto)
+    public ActionResult<EventResponseDto> Create([FromBody] EventCreateUpdateDto dto)
     {
-        // [ApiController] автоматически вернет 400 при невалидной модели,
+        // При [ApiController] ручная валидация обычно не нужна, но можно оставить.
+        if (!TryValidateModel(dto))
+            return ValidationProblem(ModelState);
 
-        var evt = new Event
-        {
-            Id = Guid.NewGuid(),
-            Title = dto.Title,
-            Description = dto.Description,
-            StartAt = dto.StartAt,
-            EndAt = dto.EndAt
-        };
-
-        var created = _eventService.Create(evt);
+        var created = _eventService.Create(dto);
 
         return CreatedAtAction(
             nameof(GetById),
             new { id = created.Id },
-            created);
+            ToResponseDto(created));
     }
 
     /// <summary>
@@ -85,19 +87,10 @@ public class EventsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult Update(Guid id, [FromBody] EventCreateUpdateDto dto)
     {
-        if (!ModelState.IsValid)
+        if (!TryValidateModel(dto))
             return ValidationProblem(ModelState);
 
-        var evt = new Event
-        {
-            Id = id,
-            Title = dto.Title,
-            Description = dto.Description,
-            StartAt = dto.StartAt,
-            EndAt = dto.EndAt
-        };
-
-        var updated = _eventService.Update(id, evt);
+        var updated = _eventService.Update(id, dto);
         if (!updated)
             return NotFound();
 

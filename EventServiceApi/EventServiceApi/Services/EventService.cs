@@ -1,3 +1,4 @@
+using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
 using System.Collections.Concurrent;
@@ -5,7 +6,7 @@ using System.Collections.Concurrent;
 namespace EventServiceApi.Services;
 
 /// <summary>
-/// In-memory (пока нет БД) реализация сервиса мероприятий.
+/// Реализация сервиса мероприятий.
 /// </summary>
 public class EventService : IEventService
 {
@@ -15,19 +16,24 @@ public class EventService : IEventService
     public IReadOnlyCollection<Event> GetAll()
         => _storage.Values
             .OrderBy(e => e.StartAt)
-            .ToArray();
+            .ToList();
 
     /// <inheritdoc />
     public Event? GetById(Guid id)
         => _storage.TryGetValue(id, out var evt) ? evt : null;
 
     /// <inheritdoc />
-    public Event Create(Event evt)
+    public Event Create(EventCreateUpdateDto dto)
     {
-        if (evt.Id == Guid.Empty)
-            evt.Id = Guid.NewGuid();
+        var evt = new Event
+        {
+            Id = Guid.NewGuid(),
+            Title = dto.Title,
+            Description = dto.Description,
+            StartAt = dto.StartAt!.Value,
+            EndAt = dto.EndAt!.Value
+        };
 
-        // Считаем, что Id уникален; при коллизии — генерируем новый
         while (!_storage.TryAdd(evt.Id, evt))
             evt.Id = Guid.NewGuid();
 
@@ -35,13 +41,23 @@ public class EventService : IEventService
     }
 
     /// <inheritdoc />
-    public bool Update(Guid id, Event evt)
+    public bool Update(Guid id, EventCreateUpdateDto dto)
     {
         if (!_storage.ContainsKey(id))
             return false;
 
-        // Полная замена сущности, Id фиксируем по маршруту
-        evt.Id = id;
+        if (dto.StartAt == null || dto.EndAt == null)
+            throw new ArgumentException("Дата начала и окончания обязательны.");
+
+        var evt = new Event
+        {
+            Id = id,
+            Title = dto.Title,
+            Description = dto.Description,
+            StartAt = dto.StartAt.Value,
+            EndAt = dto.EndAt.Value
+        };
+
         _storage[id] = evt;
         return true;
     }

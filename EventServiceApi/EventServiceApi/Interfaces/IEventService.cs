@@ -11,7 +11,12 @@ public interface IEventService
     /// <summary>
     /// Получить список всех мероприятий.
     /// </summary>
-    IReadOnlyCollection<Event> GetAll();
+    PaginatedResult<Event> GetAll(
+      string? title = null,
+      DateTime? from = null,
+      DateTime? to = null,
+      int page = 1,
+      int pageSize = 10);
 
     /// <summary>
     /// Получить мероприятие по идентификатору.

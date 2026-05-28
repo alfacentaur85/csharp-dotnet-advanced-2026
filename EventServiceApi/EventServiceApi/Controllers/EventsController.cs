@@ -32,16 +32,34 @@ public class EventsController : ControllerBase
     };
 
     /// <summary>
-    /// Получить список всех мероприятий.
+    /// Получить список всех мероприятий (с фильтрацией).
     /// </summary>
+    /// <param name="title">Поиск по названию (частичное совпадение, регистронезависимо).</param>
+    /// <param name="from">События, которые начинаются не раньше указанной даты.</param>
+    /// <param name="to">События, которые заканчиваются не позже указанной даты.</param>
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<EventResponseDto>), StatusCodes.Status200OK)]
-    public ActionResult<IEnumerable<EventResponseDto>> GetAll()
+    [ProducesResponseType(typeof(PaginatedResult<EventResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult<PaginatedResult<EventResponseDto>> GetAll(
+       [FromQuery] string? title,
+       [FromQuery] DateTime? from,
+       [FromQuery] DateTime? to,
+       [FromQuery] int page = 1,
+       [FromQuery] int pageSize = 10)
     {
-        var events = _eventService.GetAll();
-        return Ok(events.Select(ToResponseDto));
-    }
+        if (page < 1) return BadRequest("page должен быть >= 1");
+        if (pageSize < 1) return BadRequest("pageSize должен быть >= 1");
 
+        var result = _eventService.GetAll(title, from, to, page, pageSize);
+
+        return Ok(new PaginatedResult<EventResponseDto>
+        {
+            TotalCount = result.TotalCount,
+            Page = result.Page,
+            Count = result.Count,
+            Items = result.Items.Select(ToResponseDto).ToList()
+        });
+    }
     /// <summary>
     /// Получить мероприятие по id.
     /// </summary>
@@ -66,10 +84,6 @@ public class EventsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public ActionResult<EventResponseDto> Create([FromBody] EventCreateUpdateDto dto)
     {
-        // При [ApiController] ручная валидация обычно не нужна, но можно оставить.
-        if (!TryValidateModel(dto))
-            return ValidationProblem(ModelState);
-
         var created = _eventService.Create(dto);
 
         return CreatedAtAction(
@@ -87,9 +101,6 @@ public class EventsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult Update(Guid id, [FromBody] EventCreateUpdateDto dto)
     {
-        if (!TryValidateModel(dto))
-            return ValidationProblem(ModelState);
-
         var updated = _eventService.Update(id, dto);
         if (!updated)
             return NotFound();

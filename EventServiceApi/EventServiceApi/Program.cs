@@ -1,6 +1,7 @@
-using System.Reflection;
 using EventServiceApi.Interfaces;
+using EventServiceApi.Middleware;
 using EventServiceApi.Services;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +20,11 @@ builder.Services.AddSwaggerGen(options =>
 /// DI-регистрация сервисов приложения
 builder.Services.AddSingleton<IEventService, EventService>();
 
+builder.Services.AddTransient<ExceptionHandlingMiddleware>();
+
 var app = builder.Build();
+
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

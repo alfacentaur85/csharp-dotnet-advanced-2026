@@ -1,5 +1,6 @@
 using EventServiceApi.Dto;
 using EventServiceApi.Services;
+using System.ComponentModel.DataAnnotations;
 using Xunit;
 
 namespace EventServiceApi.Tests;
@@ -7,20 +8,20 @@ namespace EventServiceApi.Tests;
 public class EventServiceTests
 {
     private static EventCreateUpdateDto ValidDto(
-        string title = "Test",
-        DateTime? start = null,
-        DateTime? end = null,
-        string? description = null)
+    string title = "Test",
+    DateTime? start = null,
+    DateTime? end = null,
+    string? description = null)
     {
-        start ??= new DateTime(2026, 06, 01, 10, 00, 00, DateTimeKind.Utc);
-        end ??= start.Value.AddHours(1);
+        var s = start ?? new DateTime(2026, 06, 01, 10, 00, 00, DateTimeKind.Utc);
+        var e = end ?? s.AddHours(1);
 
         return new EventCreateUpdateDto
         {
             Title = title,
-            Description = description,
-            StartAt = start,
-            EndAt = end
+            StartAt = s,   // DateTime (обязателен)
+            EndAt = e,     // DateTime (обязателен)
+            Description = description
         };
     }
 
@@ -33,8 +34,9 @@ public class EventServiceTests
 
         Assert.NotEqual(Guid.Empty, created.Id);
         Assert.Equal("My event", created.Title);
-        Assert.NotNull(created.StartAt);
-        Assert.NotNull(created.EndAt);
+        Assert.NotEqual(default, created.StartAt);
+        Assert.NotEqual(default, created.EndAt);
+        Assert.True(created.EndAt > created.StartAt);
     }
 
     [Fact]
@@ -216,48 +218,15 @@ public class EventServiceTests
     }
 
     [Fact]
-    public void Update_ShouldThrowArgumentException_WhenDatesMissing()
+    public void Update_WithEndBeforeStart_ShouldThrowValidationException()
     {
         var service = new EventService();
-        var created = service.Create(ValidDto());
+        var id = service.Create(ValidDto()).Id;
 
-        var dto = new EventCreateUpdateDto
-        {
-            Title = "X",
-            StartAt = null,
-            EndAt = null
-        };
-
-        Assert.Throws<ArgumentException>(() => service.Update(created.Id, dto));
-    }
-
-    [Fact]
-    public void Create_WithIncorrectData_ShouldThrow_WhenStartOrEndNull()
-    {
-        var service = new EventService();
-
-        var dto = new EventCreateUpdateDto
-        {
-            Title = "Bad",
-            StartAt = null,
-            EndAt = null
-        };
-
-        // Если в сервисе вы кидаете ArgumentException — лучше заменить на Assert.Throws<ArgumentException>
-        Assert.ThrowsAny<Exception>(() => service.Create(dto));
-    }
-
-    [Fact]
-    public void Update_WithEndBeforeStart_ShouldThrowArgumentException()
-    {
-        var service = new EventService();
-        var created = service.Create(ValidDto());
-
-        var dto = ValidDto(
-            title: "Bad dates",
-            start: new DateTime(2026, 06, 10, 12, 0, 0, DateTimeKind.Utc),
-            end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc));
-
-        Assert.Throws<ArgumentException>(() => service.Update(created.Id, dto));
+        Assert.Throws<ValidationException>(() =>
+            service.Update(id, ValidDto(
+                start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
+                end: new DateTime(2026, 06, 01, 9, 0, 0, DateTimeKind.Utc)
+            )));
     }
 }

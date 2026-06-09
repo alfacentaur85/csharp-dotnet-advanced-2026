@@ -37,12 +37,12 @@ public sealed class BookingProcessingBackgroundService : BackgroundService
                     // имитация обращения к внешней системе
                     await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
 
-                    // перевод в Confirmed + ProcessedAt
+                    // перевод в Approved + ProcessedAt
                     var updated = new Booking
                     {
                         Id = booking.Id,
                         EventId = booking.EventId,
-                        Status = BookingStatus.Confirmed,
+                        Status = BookingStatus.Approved,
                         CreatedAt = booking.CreatedAt,
                         ProcessedAt = DateTime.UtcNow
                     };

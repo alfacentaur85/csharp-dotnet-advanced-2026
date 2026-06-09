@@ -1,7 +1,6 @@
 using EventServiceApi.Dto;
 using EventServiceApi.Services;
 using System.ComponentModel.DataAnnotations;
-using Xunit;
 
 namespace EventServiceApi.Tests;
 

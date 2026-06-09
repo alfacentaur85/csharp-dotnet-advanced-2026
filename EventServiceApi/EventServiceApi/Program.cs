@@ -26,7 +26,6 @@ builder.Services.AddControllers()
         };
     });
 
-builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -40,8 +39,9 @@ builder.Services.AddSwaggerGen(options =>
 
 /// DI-регистрация сервисов приложения
 builder.Services.AddSingleton<IEventService, EventService>();
-
+builder.Services.AddSingleton<IBookingService, BookingService>();
 builder.Services.AddTransient<ExceptionHandlingMiddleware>();
+builder.Services.AddHostedService<BookingProcessingBackgroundService>();
 
 var app = builder.Build();
 

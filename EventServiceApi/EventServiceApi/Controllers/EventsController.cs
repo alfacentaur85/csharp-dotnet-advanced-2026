@@ -14,12 +14,15 @@ public class EventsController : ControllerBase
 {
     private readonly IEventService _eventService;
 
+    private readonly IBookingService _bookingService;
+
     /// <summary>
     /// Конструктор контроллера мероприятий.
     /// </summary>
-    public EventsController(IEventService eventService)
+    public EventsController(IEventService eventService, IBookingService bookingService)
     {
         _eventService = eventService;
+        _bookingService = bookingService;
     }
 
     private static EventResponseDto ToResponseDto(Event evt) => new()
@@ -121,5 +124,33 @@ public class EventsController : ControllerBase
             return NotFound();
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Создать бронь на событие.
+    /// </summary>
+    [HttpPost("{id:guid}/book")]
+    [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BookingResponseDto>> Book(Guid id)
+    {
+        // если событие не найдено — 404
+        var evt = _eventService.GetById(id);
+        if (evt is null)
+            return NotFound();
+
+        var booking = await _bookingService.CreateBookingAsync(id);
+
+        var response = new BookingResponseDto
+        {
+            Id = booking.Id,
+            EventId = booking.EventId,
+            Status = booking.Status
+        };
+
+        // Location: /bookings/{bookingId}
+        Response.Headers.Location = $"/bookings/{booking.Id}";
+
+        return Accepted(response); // 202
     }
 }

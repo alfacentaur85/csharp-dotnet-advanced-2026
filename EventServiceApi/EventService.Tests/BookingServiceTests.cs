@@ -109,7 +109,7 @@ public class BookingServiceTests
         {
             Id = created.Id,
             EventId = created.EventId,
-            Status = BookingStatus.Approved,
+            Status = BookingStatus.Confirmed,
             CreatedAt = created.CreatedAt,
             ProcessedAt = DateTime.UtcNow
         };
@@ -120,7 +120,7 @@ public class BookingServiceTests
         // assert
         Assert.True(ok);
         Assert.NotNull(loaded);
-        Assert.Equal(BookingStatus.Approved, loaded!.Status);
+        Assert.Equal(BookingStatus.Confirmed, loaded!.Status);
         Assert.NotNull(loaded.ProcessedAt);
     }
 

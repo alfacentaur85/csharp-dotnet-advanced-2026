@@ -83,7 +83,7 @@ public sealed class BookingService : IBookingService
             {
                 Id = current.Id,
                 EventId = current.EventId,
-                Status = BookingStatus.Approved,
+                Status = BookingStatus.Confirmed,
                 CreatedAt = current.CreatedAt,
                 ProcessedAt = DateTime.UtcNow
             };

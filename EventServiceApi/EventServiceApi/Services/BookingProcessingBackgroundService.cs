@@ -1,7 +1,5 @@
 // Services/BookingProcessingBackgroundService.cs
-using EventServiceApi.Enums;
 using EventServiceApi.Interfaces;
-using EventServiceApi.Models;
 
 namespace EventServiceApi.Services;
 
@@ -20,7 +18,6 @@ public sealed class BookingProcessingBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // период опроса
         var pollInterval = TimeSpan.FromSeconds(1);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -37,19 +34,15 @@ public sealed class BookingProcessingBackgroundService : BackgroundService
                     // имитация обращения к внешней системе
                     await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
 
-                    // перевод в Approved + ProcessedAt
-                    var updated = new Booking
-                    {
-                        Id = booking.Id,
-                        EventId = booking.EventId,
-                        Status = BookingStatus.Approved,
-                        CreatedAt = booking.CreatedAt,
-                        ProcessedAt = DateTime.UtcNow
-                    };
+                    // атомарно обработать pending-бронь (без дублирования логики)
+                    var processed = await _bookingService.TryProcessPendingAsync(booking.Id);
 
-                    var saved = await _bookingService.TryUpdateBookingAsync(updated);
-                    if (!saved)
-                        _logger.LogWarning("Booking {BookingId} not found during update", booking.Id);
+                    // processed=false означает:
+                    // - бронь уже обработали параллельно
+                    // - бронь удалили
+                    // - бронь уже не Pending
+                    if (!processed)
+                        _logger.LogDebug("Booking {BookingId} was not processed (already processed/removed)", booking.Id);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

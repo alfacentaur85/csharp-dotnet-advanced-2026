@@ -10,4 +10,5 @@ public interface IBookingService
     // для фоновой обработки
     Task<IReadOnlyCollection<Booking>> GetPendingBookingsAsync();
     Task<bool> TryUpdateBookingAsync(Booking booking);
+    Task<bool> TryProcessPendingAsync(Guid bookingId);
 }

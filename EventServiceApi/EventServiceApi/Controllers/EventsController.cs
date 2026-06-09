@@ -134,11 +134,6 @@ public class EventsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BookingResponseDto>> Book(Guid id)
     {
-        // если событие не найдено — 404
-        var evt = _eventService.GetById(id);
-        if (evt is null)
-            return NotFound();
-
         var booking = await _bookingService.CreateBookingAsync(id);
 
         var response = new BookingResponseDto

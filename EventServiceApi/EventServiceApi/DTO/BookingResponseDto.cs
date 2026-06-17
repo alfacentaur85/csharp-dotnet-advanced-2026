@@ -21,4 +21,14 @@ public class BookingResponseDto
     /// Текущий статус брони.
     /// </summary>
     public BookingStatus Status { get; set; }
+
+    /// <summary>
+    /// Дата/время создания брони (UTC).
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Дата/время обработки брони (UTC), если обработана.
+    /// </summary>
+    public DateTime? ProcessedAt { get; set; }
 }

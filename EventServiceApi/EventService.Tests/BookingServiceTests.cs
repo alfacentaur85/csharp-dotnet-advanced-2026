@@ -174,4 +174,98 @@ public class BookingServiceTests
         // assert
         Assert.Null(loaded);
     }
+
+    [Fact]
+    public async Task TryProcessPendingAsync_ForPendingBooking_SetsConfirmedAndProcessedAt()
+    {
+        // arrange
+        var eventId = Guid.NewGuid();
+        var evt = new Event
+        {
+            Id = eventId,
+            Title = "Test",
+            StartAt = DateTime.UtcNow,
+            EndAt = DateTime.UtcNow.AddHours(1)
+        };
+
+        var eventServiceMock = new Mock<IEventService>();
+        eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
+
+        var bookingService = new BookingService(eventServiceMock.Object);
+        var created = await bookingService.CreateBookingAsync(eventId);
+
+        // act
+        var processed = await bookingService.TryProcessPendingAsync(created.Id);
+        var loaded = await bookingService.GetBookingByIdAsync(created.Id);
+
+        // assert
+        Assert.True(processed);
+        Assert.NotNull(loaded);
+
+        Assert.Equal(BookingStatus.Confirmed, loaded!.Status);
+        Assert.NotNull(loaded.ProcessedAt);
+        Assert.True(loaded.ProcessedAt!.Value >= loaded.CreatedAt);
+    }
+
+    [Fact]
+    public async Task TryProcessPendingAsync_WhenAlreadyProcessed_ReturnsFalse_AndDoesNotOverwriteProcessedAt()
+    {
+        // arrange
+        var eventId = Guid.NewGuid();
+        var evt = new Event
+        {
+            Id = eventId,
+            Title = "Test",
+            StartAt = DateTime.UtcNow,
+            EndAt = DateTime.UtcNow.AddHours(1)
+        };
+
+        var eventServiceMock = new Mock<IEventService>();
+        eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
+
+        var bookingService = new BookingService(eventServiceMock.Object);
+        var created = await bookingService.CreateBookingAsync(eventId);
+
+        // first processing
+        var first = await bookingService.TryProcessPendingAsync(created.Id);
+        var afterFirst = await bookingService.GetBookingByIdAsync(created.Id);
+        Assert.True(first);
+        Assert.NotNull(afterFirst);
+        var processedAt1 = afterFirst!.ProcessedAt;
+
+        // небольшая пауза, чтобы было заметно, если ProcessedAt перезапишется
+        await Task.Delay(10);
+
+        // act: second processing attempt
+        var second = await bookingService.TryProcessPendingAsync(created.Id);
+        var afterSecond = await bookingService.GetBookingByIdAsync(created.Id);
+
+        // assert
+        Assert.False(second);
+        Assert.NotNull(afterSecond);
+        Assert.Equal(BookingStatus.Confirmed, afterSecond!.Status);
+        Assert.Equal(processedAt1, afterSecond.ProcessedAt); // не перезаписали
+    }
+
+    [Fact]
+    public async Task TryProcessPendingAsync_ForUnknownBooking_ReturnsFalse()
+    {
+        // arrange
+        var evt = new Event
+        {
+            Id = Guid.NewGuid(),
+            Title = "Test",
+            StartAt = DateTime.UtcNow,
+            EndAt = DateTime.UtcNow.AddHours(1)
+        };
+
+        var eventServiceMock = CreateEventServiceMockReturning(evt);
+        var bookingService = new BookingService(eventServiceMock.Object);
+
+        // act
+        var processed = await bookingService.TryProcessPendingAsync(Guid.NewGuid());
+
+        // assert
+        Assert.False(processed);
+    }
 }

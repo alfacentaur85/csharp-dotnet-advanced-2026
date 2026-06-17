@@ -1,6 +1,6 @@
 using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
-using EventServiceApi.Models;
+using EventServiceApi.Mappings;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EventServiceApi.Controllers;
@@ -19,13 +19,6 @@ public class BookingsController : ControllerBase
         _bookingService = bookingService;
     }
 
-    private static BookingResponseDto ToResponseDto(Booking booking) => new()
-    {
-        Id = booking.Id,
-        EventId = booking.EventId,
-        Status = booking.Status
-    };
-
     /// <summary>
     /// Получить бронь по id.
     /// </summary>
@@ -39,6 +32,6 @@ public class BookingsController : ControllerBase
         if (booking is null)
             return NotFound();
 
-        return Ok(ToResponseDto(booking));
+        return Ok(booking.ToResponseDto());
     }
 }

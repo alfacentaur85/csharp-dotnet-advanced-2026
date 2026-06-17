@@ -2,6 +2,7 @@ using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
 using Microsoft.AspNetCore.Mvc;
+using EventServiceApi.Mappings;
 
 namespace EventServiceApi.Controllers;
 
@@ -136,16 +137,11 @@ public class EventsController : ControllerBase
     {
         var booking = await _bookingService.CreateBookingAsync(id);
 
-        var response = new BookingResponseDto
-        {
-            Id = booking.Id,
-            EventId = booking.EventId,
-            Status = booking.Status
-        };
-
-        // Location: /bookings/{bookingId}
-        Response.Headers.Location = $"/bookings/{booking.Id}";
-
-        return Accepted(response); // 202
+        return AcceptedAtAction(
+         actionName: nameof(BookingsController.GetById),
+         controllerName: "Bookings",
+         routeValues: new { id = booking.Id },
+         value: booking.ToResponseDto()
+     );
     }
 }

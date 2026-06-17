@@ -15,17 +15,21 @@ dotnet run
 
 ## Swagger
 В режиме Development доступен Swagger UI:
-https://localhost:<port>/swagger
+https://localhost:7041/swagger/index.html
 
 ## GET /events — фильтрация
 Поддерживаются query-параметры фильтрации (все опциональные):
 
 title (string) — поиск по названию (частичное совпадение, регистронезависимо)
+
 from (DateTime) — события, которые начинаются не раньше указанной даты (StartAt >= from)
+
 to (DateTime) — события, которые заканчиваются не позже указанной даты (EndAt <= to)
+
 Все фильтры применяются совместно (логическое И).
 
 Примеры:
+
 GET /events?title=conf
 GET /events?from=2026-06-01T00:00:00&to=2026-06-30T23:59:59
 GET /events?title=meet&from=2026-06-01T00:00:00&to=2026-06-30T23:59:59
@@ -57,8 +61,86 @@ GET /events возвращает пагинированный результат
   ]
 }
 
+## Модель Booking
+Booking — бронь на участие в событии.
+
+Поля:
+Id: Guid — уникальный идентификатор брони (генерируется при создании).
+EventId: Guid — идентификатор события, к которому относится бронь.
+Status: BookingStatus — текущий статус брони.
+CreatedAt: DateTime — дата/время создания брони (устанавливается при создании).
+ProcessedAt: DateTime? — дата/время обработки брони (заполняется после обработки).
+
+## Статусы (BookingStatus)
+Pending — бронь создана и ожидает обработки.
+Confirmed — бронь подтверждена (в текущей версии используется как результат фоновой обработки).
+Rejected — бронь отклонена (зарезервировано для следующих спринтов).
+Cancelled — бронь отменена (зарезервировано для следующих спринтов).
+
+### Эндпоинт бронирования
+## GET /bookings/{id}
+Возвращает информацию о брони по её идентификатору.
+
+Вызывает BookingService.GetBookingByIdAsync(bookingId).
+
+- Успех: 200 OK
+- Если бронь не найдена: 404 Not Found
+- Ошибки: в формате Problem Details (RFC 7807) (application/problem+json)
+
+Пример запроса:
+
+GET /bookings/2c2f1a10-1f3a-4c2d-9b11-8a0c1d2e3f44
+
+Пример успешного ответа:
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "id": "2c2f1a10-1f3a-4c2d-9b11-8a0c1d2e3f44",
+  "eventId": "6f1b2c2a-2a2f-4f7b-9a0d-3c0f4c2a1d11",
+  "status": "Pending",
+  "createdAt": "2026-06-10T18:01:23Z",
+  "processedAt": null
+}
+
+Пример ответа, если бронь не найдена (404 Not Found):
+
+HTTP/1.1 404 Not Found
+Content-Type: application/problem+json
+
+{
+  "type": "about:blank",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Booking not found.",
+  "instance": "/bookings/2c2f1a10-1f3a-4c2d-9b11-8a0c1d2e3f44"
+}
+
+## POST /events/{id}/book
+Создаёт бронь для указанного события.
+
+Вызывает BookingService.CreateBookingAsync(eventId)
+Возвращает 202 Accepted
+В теле ответа возвращает информацию о созданной брони: Id, EventId, Status
+В заголовке Location возвращает ссылку на ресурс брони: /bookings/{bookingId}
+Если событие не найдено — возвращает 404 Not Found
+
+Пример запроса:
+POST /events/6f1b2c2a-2a2f-4f7b-9a0d-3c0f4c2a1d11/book
+
+Пример ответа:
+HTTP/1.1 202 Accepted
+Location: /bookings/2c2f1a10-1f3a-4c2d-9b11-8a0c1d2e3f44
+Content-Type: application/json
+{
+  "id": "2c2f1a10-1f3a-4c2d-9b11-8a0c1d2e3f44",
+  "eventId": "6f1b2c2a-2a2f-4f7b-9a0d-3c0f4c2a1d11",
+  "status": "Pending"
+}
+
 ## Формат ответа при ошибках
-ибки возвращаются в формате Problem Details (RFC 7807) (Content-Type: application/problem+json).
+Ошибки возвращаются в формате Problem Details (RFC 7807) (Content-Type: application/problem+json).
 
 Пример:
 {
@@ -75,10 +157,74 @@ GET /events возвращает пагинированный результат
 500 Internal Server Error — непредвиденная ошибка сервера
 
 ## Тесты
-Тесты написаны на xUnit в отдельном проекте (например, EventServiceApi.Tests).
+Тесты написаны на xUnit в отдельном проекте (например, EventService.Tests).
 
 Запуск тестов из корня решения/репозитория:
 
 ```bash
 dotnet test
 ```
+## Фоновая обработка бронирований
+В приложении запущен фоновый сервис BookingProcessingBackgroundService (на базе BackgroundService), который автоматически обрабатывает бронирования.
+
+Как работает:
+1. Сервис с заданным интервалом (poll interval) опрашивает хранилище бронирований и получает список броней в статусе Pending.
+
+2. Для каждой найденной брони выполняется искусственная задержка Task.Delay(2 секунды), имитирующая обращение к внешней системе (например, платёжный шлюз/CRM/сервис подтверждения).
+
+3. После задержки бронь переводится в статус подтверждения:
+- в текущей версии используется статус Confirmed (как результат “подтверждения”);
+- в следующих спринтах будет добавлена логика выбора статуса (Confirmed/Rejected и т.д.).
+
+4. При смене статуса заполняется поле ProcessedAt (время обработки).
+
+5. Обновлённая бронь сохраняется обратно в in-memory хранилище.
+
+#### Конкурентность и защита от повторной обработки
+Для предотвращения повторной обработки одной и той же брони используется атомарная операция обновления (метод TryProcessPendingAsync), которая переводит бронь из Pending в Confirmed только если она всё ещё находится в статусе Pending на момент обновления.
+
+## Пример полного сценария (через Swagger UI)
+1. Откройте Swagger UI
+Перейдите в браузере на: https://localhost:7041/swagger/index.html
+
+2. Создайте событие
+В Swagger найдите Events → POST /events → Try it out и отправьте, например:
+```
+{
+  "title": "DotNet Meetup",
+  "description": "Встреча разработчиков",
+  "startAt": "2026-06-10T18:00:00Z",
+  "endAt": "2026-06-10T20:00:00Z"
+}
+```
+Нажмите Execute.
+В ответе вы получите объект события. Скопируйте id созданного события (далее eventId).
+
+3. Создайте бронь на событие
+В Swagger найдите POST /events/{id}/book → Try it out:
+- вставьте eventId в параметр {id}
+- нажмите Execute
+
+Ожидаемый результат:
+- HTTP статус: 202 Accepted
+- заголовок ответа Location: /bookings/{bookingId}
+- в теле будет информация о брони, включая id (далее bookingId) и status = Pending
+ 
+4. Проверьте, что бронь в статусе Pending
+В Swagger найдите Bookings → GET /bookings/{id} → Try it out:
+- вставьте bookingId
+- нажмите Execute
+
+Ожидаемый результат:
+- HTTP статус: 200 OK
+- status: Pending
+
+5. Подождите обработку фоновой задачей
+Подождите ~3–5 секунд (в сервисе есть искусственная задержка 2 секунды + период опроса).
+
+6. Повторно проверьте статус брони
+Снова выполните GET /bookings/{id} с тем же bookingId.
+
+Ожидаемый результат:
+- HTTP статус: 200 OK
+- статус изменится на подтверждённый: Confirmed

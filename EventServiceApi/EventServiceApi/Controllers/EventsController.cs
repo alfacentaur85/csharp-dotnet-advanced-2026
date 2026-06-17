@@ -2,6 +2,7 @@ using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
 using Microsoft.AspNetCore.Mvc;
+using EventServiceApi.Mappings;
 
 namespace EventServiceApi.Controllers;
 
@@ -14,12 +15,15 @@ public class EventsController : ControllerBase
 {
     private readonly IEventService _eventService;
 
+    private readonly IBookingService _bookingService;
+
     /// <summary>
     /// Конструктор контроллера мероприятий.
     /// </summary>
-    public EventsController(IEventService eventService)
+    public EventsController(IEventService eventService, IBookingService bookingService)
     {
         _eventService = eventService;
+        _bookingService = bookingService;
     }
 
     private static EventResponseDto ToResponseDto(Event evt) => new()
@@ -121,5 +125,23 @@ public class EventsController : ControllerBase
             return NotFound();
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Создать бронь на событие.
+    /// </summary>
+    [HttpPost("{id:guid}/book")]
+    [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BookingResponseDto>> Book(Guid id)
+    {
+        var booking = await _bookingService.CreateBookingAsync(id);
+
+        return AcceptedAtAction(
+         actionName: nameof(BookingsController.GetById),
+         controllerName: "Bookings",
+         routeValues: new { id = booking.Id },
+         value: booking.ToResponseDto()
+     );
     }
 }

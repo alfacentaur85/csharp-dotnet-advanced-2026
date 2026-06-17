@@ -1,11 +1,31 @@
 using EventServiceApi.Interfaces;
 using EventServiceApi.Middleware;
 using EventServiceApi.Services;
+using Microsoft.AspNetCore.Mvc;
 using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var problem = new ValidationProblemDetails(context.ModelState)
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = "Ошибки валидации.",
+                Instance = context.HttpContext.Request.Path
+            };
+
+            return new BadRequestObjectResult(problem)
+            {
+                ContentTypes = { "application/problem+json" }
+            };
+        };
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -19,8 +39,9 @@ builder.Services.AddSwaggerGen(options =>
 
 /// DI-регистрация сервисов приложения
 builder.Services.AddSingleton<IEventService, EventService>();
-
+builder.Services.AddSingleton<IBookingService, BookingService>();
 builder.Services.AddTransient<ExceptionHandlingMiddleware>();
+builder.Services.AddHostedService<BookingProcessingBackgroundService>();
 
 var app = builder.Build();
 

@@ -2,6 +2,7 @@ using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
 using System.Collections.Concurrent;
+using System.ComponentModel.DataAnnotations;
 
 namespace EventServiceApi.Services;
 
@@ -20,6 +21,9 @@ public class EventService : IEventService
         int page = 1,
         int pageSize = 10)
     {
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+            throw new ArgumentException("Дата начала события не может быть больше даты окончания события");
+
         if (page < 1) throw new ArgumentException("page должен быть >= 1");
         if (pageSize < 1) throw new ArgumentException("pageSize должен быть >= 1");
 
@@ -42,7 +46,7 @@ public class EventService : IEventService
         var totalCount = query.Count();
 
         // Стабильная сортировка перед пагинацией
-        query = query.OrderBy(e => e.StartAt);
+        query = query.OrderBy(e => e.StartAt).ThenBy(e => e.Id);
 
         var items = query
             .Skip((page - 1) * pageSize)
@@ -72,8 +76,8 @@ public class EventService : IEventService
             Id = Guid.NewGuid(),
             Title = dto.Title,
             Description = dto.Description,
-            StartAt = dto.StartAt!.Value,
-            EndAt = dto.EndAt!.Value
+            StartAt = dto.StartAt,
+            EndAt = dto.EndAt
         };
 
         while (!_storage.TryAdd(evt.Id, evt))
@@ -110,14 +114,11 @@ public class EventService : IEventService
 
     private static (DateTime start, DateTime end) ValidateDates(EventCreateUpdateDto dto)
     {
-        if (dto.StartAt is null || dto.EndAt is null)
-            throw new ArgumentException("Дата начала и окончания обязательны.");
-
-        var start = dto.StartAt.Value;
-        var end = dto.EndAt.Value;
+        var start = dto.StartAt;
+        var end = dto.EndAt;
 
         if (end <= start)
-            throw new ArgumentException("Дата окончания должна быть позже даты начала.");
+            throw new ValidationException("Дата окончания должна быть позже даты начала.");
 
         return (start, end);
     }

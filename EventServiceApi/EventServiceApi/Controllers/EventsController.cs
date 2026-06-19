@@ -32,7 +32,9 @@ public class EventsController : ControllerBase
         Title = evt.Title,
         Description = evt.Description,
         StartAt = evt.StartAt,
-        EndAt = evt.EndAt
+        EndAt = evt.EndAt,
+        TotalSeats = evt.TotalSeats,
+        AvailableSeats = evt.AvailableSeats
     };
 
     /// <summary>
@@ -86,7 +88,7 @@ public class EventsController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult<EventResponseDto> Create([FromBody] EventCreateUpdateDto dto)
+    public ActionResult<EventResponseDto> Create([FromBody] EventCreateDto dto)
     {
         var created = _eventService.Create(dto);
 
@@ -103,7 +105,7 @@ public class EventsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult Update(Guid id, [FromBody] EventCreateUpdateDto dto)
+    public IActionResult Update(Guid id, [FromBody] EventUpdateDto dto)
     {
         var updated = _eventService.Update(id, dto);
         if (!updated)
@@ -133,6 +135,7 @@ public class EventsController : ControllerBase
     [HttpPost("{id:guid}/book")]
     [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BookingResponseDto>> Book(Guid id)
     {
         var booking = await _bookingService.CreateBookingAsync(id);

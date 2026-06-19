@@ -30,7 +30,7 @@ public interface IEventService
     /// </summary>
     /// <param name="evt">Мероприятие.</param>
     /// <returns>Созданное мероприятие.</returns>
-    Event Create(EventCreateUpdateDto evt);
+    Event Create(EventCreateDto evt);
 
     /// <summary>
     /// Полностью обновить мероприятие по идентификатору.
@@ -38,7 +38,7 @@ public interface IEventService
     /// <param name="id">Идентификатор мероприятия.</param>
     /// <param name="evt">Новые данные мероприятия (Id игнорируется).</param>
     /// <returns>True если обновлено, иначе false.</returns>
-    bool Update(Guid id, EventCreateUpdateDto evt);
+    bool Update(Guid id, EventUpdateDto evt);
 
     /// <summary>
     /// Удалить мероприятие по идентификатору.
@@ -46,4 +46,5 @@ public interface IEventService
     /// <param name="id">Идентификатор мероприятия.</param>
     /// <returns>True если удалено, иначе false.</returns>
     bool Delete(Guid id);
+
 }

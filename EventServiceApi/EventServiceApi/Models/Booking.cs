@@ -27,4 +27,17 @@ public class Booking
 
     /// <summary>Дата и время обработки брони (опционально).</summary>
     public DateTime? ProcessedAt { get; set; }
+
+    // методы для прохождения тестов
+    public void Confirm()
+    {
+        Status = BookingStatus.Confirmed;
+        ProcessedAt = DateTime.UtcNow;
+    }
+
+    public void Reject()
+    {
+        Status = BookingStatus.Rejected;
+        ProcessedAt = DateTime.UtcNow;
+    }
 }

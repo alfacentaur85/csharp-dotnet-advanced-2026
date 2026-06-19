@@ -67,17 +67,27 @@ public class EventService : IEventService
         => _storage.TryGetValue(id, out var evt) ? evt : null;
 
     /// <inheritdoc />
-    public Event Create(EventCreateUpdateDto dto)
+    public Event Create(EventCreateDto dto)
     {
-        ValidateDates(dto);
+        var (start, end) = ValidateDates(dto.StartAt, dto.EndAt);
+
+        if (dto.TotalSeats is null)
+            throw new ValidationException("TotalSeats обязателен.");
+
+        var totalSeats = dto.TotalSeats.Value;
+
+        if (totalSeats <= 0)
+            throw new ValidationException("TotalSeats должен быть больше нуля.");
 
         var evt = new Event
         {
             Id = Guid.NewGuid(),
             Title = dto.Title,
             Description = dto.Description,
-            StartAt = dto.StartAt,
-            EndAt = dto.EndAt
+            StartAt = start,
+            EndAt = end,
+            TotalSeats = totalSeats,
+            AvailableSeats = totalSeats
         };
 
         while (!_storage.TryAdd(evt.Id, evt))
@@ -87,24 +97,45 @@ public class EventService : IEventService
     }
 
     /// <inheritdoc />
-    public bool Update(Guid id, EventCreateUpdateDto dto)
+    public bool Update(Guid id, EventUpdateDto dto)
     {
-        if (!_storage.ContainsKey(id))
+        if (!_storage.TryGetValue(id, out var existing))
             return false;
 
-        var (start, end) = ValidateDates(dto);
+        var (start, end) = ValidateDates(dto.StartAt, dto.EndAt);
 
-        var evt = new Event
+        // Сколько мест уже занято по текущему состоянию
+        var occupied = existing.TotalSeats - existing.AvailableSeats;
+        if (occupied < 0) occupied = 0; // защита от неконсистентности
+
+        var newTotalSeats = existing.TotalSeats;
+        var newAvailableSeats = existing.AvailableSeats;
+
+        if (dto.TotalSeats.HasValue)
+        {
+            newTotalSeats = dto.TotalSeats.Value;
+
+            if (newTotalSeats <= 0)
+                throw new ValidationException("TotalSeats должен быть больше нуля.");
+
+            if (newTotalSeats < occupied)
+                throw new ValidationException("Нельзя уменьшить TotalSeats ниже количества уже занятых мест.");
+
+            newAvailableSeats = newTotalSeats - occupied;
+        }
+
+        var updated = new Event
         {
             Id = id,
             Title = dto.Title,
             Description = dto.Description,
             StartAt = start,
-            EndAt = end
+            EndAt = end,
+            TotalSeats = newTotalSeats,
+            AvailableSeats = newAvailableSeats
         };
 
-        _storage[id] = evt;
-
+        _storage[id] = updated;
         return true;
     }
 
@@ -112,11 +143,20 @@ public class EventService : IEventService
     public bool Delete(Guid id)
         => _storage.TryRemove(id, out _);
 
-    private static (DateTime start, DateTime end) ValidateDates(EventCreateUpdateDto dto)
+    /// <inheritdoc />
+    public bool TryUpdate(Event evt)
     {
-        var start = dto.StartAt;
-        var end = dto.EndAt;
+        if (evt is null) throw new ArgumentNullException(nameof(evt));
 
+        if (!_storage.ContainsKey(evt.Id))
+            return false;
+
+        _storage[evt.Id] = evt;
+        return true;
+    }
+
+    private static (DateTime start, DateTime end) ValidateDates(DateTime start, DateTime end)
+    {
         if (end <= start)
             throw new ValidationException("Дата окончания должна быть позже даты начала.");
 

@@ -1,6 +1,7 @@
+using EventServiceApi.Exceptions;
+using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
 
 namespace EventServiceApi.Middleware;
 
@@ -51,6 +52,18 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
                 statusCode = StatusCodes.Status404NotFound;
                 title = "Not Found";
                 detail = knf.Message;
+                break;
+
+            case NotFoundException nf:
+                statusCode = StatusCodes.Status404NotFound;
+                title = "Not Found";
+                detail = nf.Message;
+                break;
+
+            case NoAvailableSeatsException nase:
+                statusCode = StatusCodes.Status409Conflict;
+                title = "Conflict";
+                detail = nase.Message;
                 break;
         }
 

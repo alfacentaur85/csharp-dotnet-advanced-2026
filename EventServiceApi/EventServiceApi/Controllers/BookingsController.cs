@@ -1,4 +1,5 @@
 using EventServiceApi.Dto;
+using EventServiceApi.Exceptions;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Mappings;
 using Microsoft.AspNetCore.Mvc;
@@ -25,12 +26,12 @@ public class BookingsController : ControllerBase
     /// <param name="id">Идентификатор брони.</param>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BookingResponseDto>> GetById(Guid id)
     {
         var booking = await _bookingService.GetBookingByIdAsync(id);
         if (booking is null)
-            return NotFound();
+            throw new NotFoundException("Booking not found.");
 
         return Ok(booking.ToResponseDto());
     }

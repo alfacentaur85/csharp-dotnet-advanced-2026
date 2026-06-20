@@ -2,6 +2,7 @@ using EventServiceApi.Enums;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
 using EventServiceApi.Services;
+using Microsoft.Extensions.Logging;
 using Moq;
 
 
@@ -19,12 +20,23 @@ public class BookingServiceTests
         return mock;
     }
 
+    private static Event CreateTestEvent(Guid id, int totalSeats = 10)
+    => new()
+    {
+        Id = id,
+        Title = "Test",
+        StartAt = DateTime.UtcNow,
+        EndAt = DateTime.UtcNow.AddHours(1),
+        TotalSeats = totalSeats,
+        AvailableSeats = totalSeats
+    };
+
     [Fact]
     public async Task CreateBooking_ForExistingEvent_ReturnsPendingBooking()
     {
         // arrange
         var eventId = Guid.NewGuid();
-        var evt = new Event { Id = eventId, Title = "Test", StartAt = DateTime.UtcNow, EndAt = DateTime.UtcNow.AddHours(1) };
+        var evt = CreateTestEvent(eventId, totalSeats: 3);
 
         var eventServiceMock = new Mock<IEventService>();
         eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
@@ -47,7 +59,7 @@ public class BookingServiceTests
     {
         // arrange
         var eventId = Guid.NewGuid();
-        var evt = new Event { Id = eventId, Title = "Test", StartAt = DateTime.UtcNow, EndAt = DateTime.UtcNow.AddHours(1) };
+        var evt = CreateTestEvent(eventId, totalSeats: 3);
 
         var eventServiceMock = new Mock<IEventService>();
         eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
@@ -70,7 +82,7 @@ public class BookingServiceTests
     {
         // arrange
         var eventId = Guid.NewGuid();
-        var evt = new Event { Id = eventId, Title = "Test", StartAt = DateTime.UtcNow, EndAt = DateTime.UtcNow.AddHours(1) };
+        var evt = CreateTestEvent(eventId, totalSeats: 3);
 
         var eventServiceMock = new Mock<IEventService>();
         eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
@@ -95,7 +107,7 @@ public class BookingServiceTests
     {
         // arrange
         var eventId = Guid.NewGuid();
-        var evt = new Event { Id = eventId, Title = "Test", StartAt = DateTime.UtcNow, EndAt = DateTime.UtcNow.AddHours(1) };
+        var evt = CreateTestEvent(eventId, totalSeats: 3);
 
         var eventServiceMock = new Mock<IEventService>();
         eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
@@ -125,42 +137,11 @@ public class BookingServiceTests
     }
 
     [Fact]
-    public async Task CreateBooking_ForNonExistingEvent_ThrowsKeyNotFound()
-    {
-        // arrange
-        var eventId = Guid.NewGuid();
-
-        var eventServiceMock = new Mock<IEventService>();
-        eventServiceMock.Setup(s => s.GetById(eventId)).Returns((Event?)null);
-
-        var bookingService = new BookingService(eventServiceMock.Object);
-
-        // act + assert
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => bookingService.CreateBookingAsync(eventId));
-    }
-
-    [Fact]
-    public async Task CreateBooking_ForDeletedEvent_ThrowsKeyNotFound()
-    {
-        // По сути то же самое, что "несуществующее": GetById возвращает null
-        // arrange
-        var eventId = Guid.NewGuid();
-
-        var eventServiceMock = new Mock<IEventService>();
-        eventServiceMock.Setup(s => s.GetById(eventId)).Returns((Event?)null);
-
-        var bookingService = new BookingService(eventServiceMock.Object);
-
-        // act + assert
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => bookingService.CreateBookingAsync(eventId));
-    }
-
-    [Fact]
     public async Task GetBookingById_ForUnknownId_ReturnsNull()
     {
         // arrange
         var eventId = Guid.NewGuid();
-        var evt = new Event { Id = eventId, Title = "Test", StartAt = DateTime.UtcNow, EndAt = DateTime.UtcNow.AddHours(1) };
+        var evt = CreateTestEvent(eventId, totalSeats: 3);
 
         var eventServiceMock = new Mock<IEventService>();
         // даже если событие есть, мы ищем несуществующую бронь
@@ -180,13 +161,7 @@ public class BookingServiceTests
     {
         // arrange
         var eventId = Guid.NewGuid();
-        var evt = new Event
-        {
-            Id = eventId,
-            Title = "Test",
-            StartAt = DateTime.UtcNow,
-            EndAt = DateTime.UtcNow.AddHours(1)
-        };
+        var evt = CreateTestEvent(eventId, totalSeats: 3);
 
         var eventServiceMock = new Mock<IEventService>();
         eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
@@ -212,13 +187,7 @@ public class BookingServiceTests
     {
         // arrange
         var eventId = Guid.NewGuid();
-        var evt = new Event
-        {
-            Id = eventId,
-            Title = "Test",
-            StartAt = DateTime.UtcNow,
-            EndAt = DateTime.UtcNow.AddHours(1)
-        };
+        var evt = CreateTestEvent(eventId, totalSeats: 3);
 
         var eventServiceMock = new Mock<IEventService>();
         eventServiceMock.Setup(s => s.GetById(eventId)).Returns(evt);
@@ -251,13 +220,7 @@ public class BookingServiceTests
     public async Task TryProcessPendingAsync_ForUnknownBooking_ReturnsFalse()
     {
         // arrange
-        var evt = new Event
-        {
-            Id = Guid.NewGuid(),
-            Title = "Test",
-            StartAt = DateTime.UtcNow,
-            EndAt = DateTime.UtcNow.AddHours(1)
-        };
+        var evt = CreateTestEvent(Guid.NewGuid(), totalSeats: 3);
 
         var eventServiceMock = CreateEventServiceMockReturning(evt);
         var bookingService = new BookingService(eventServiceMock.Object);

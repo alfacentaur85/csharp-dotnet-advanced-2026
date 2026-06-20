@@ -13,6 +13,7 @@ builder.Services.AddControllers()
         {
             var problem = new ValidationProblemDetails(context.ModelState)
             {
+                Type = "about:blank",
                 Status = StatusCodes.Status400BadRequest,
                 Title = "Bad Request",
                 Detail = "Ошибки валидации.",

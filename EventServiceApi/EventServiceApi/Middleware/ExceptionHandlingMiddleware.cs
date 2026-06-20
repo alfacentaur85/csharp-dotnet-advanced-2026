@@ -75,6 +75,7 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
 
         var problem = new ProblemDetails
         {
+            Type = "about:blank",
             Status = statusCode,
             Title = title,
             Detail = detail,

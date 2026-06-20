@@ -103,7 +103,7 @@ public sealed class BookingService : IBookingService
     }
 
     /// <summary>
-    /// Атомарная обработка: если бронь всё ещё Pending — переводим в Approved и ставим ProcessedAt.
+    /// Атомарная обработка: если бронь всё ещё Pending — переводим в Confirmed и ставим ProcessedAt.
     /// Чтобы одну бронь не обработать дважды.
     /// </summary>
     public Task<bool> TryProcessPendingAsync(Guid bookingId)

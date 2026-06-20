@@ -53,8 +53,24 @@ public class EventsController : ControllerBase
        [FromQuery] int page = 1,
        [FromQuery] int pageSize = 10)
     {
-        if (page < 1) return BadRequest("page должен быть >= 1");
-        if (pageSize < 1) return BadRequest("pageSize должен быть >= 1");
+        if (page < 1 || pageSize < 1)
+        {
+            var errors = new Dictionary<string, string[]>();
+
+            if (page < 1)
+                errors["page"] = new[] { "page должен быть >= 1" };
+
+            if (pageSize < 1)
+                errors["pageSize"] = new[] { "pageSize должен быть >= 1" };
+
+            return BadRequest(new ValidationProblemDetails(errors)
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = "Ошибки валидации.",
+                Instance = HttpContext.Request.Path
+            });
+        }
 
         var result = _eventService.GetAll(title, from, to, page, pageSize);
 

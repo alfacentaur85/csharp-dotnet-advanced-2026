@@ -69,26 +69,12 @@ public class EventService : IEventService
     /// <inheritdoc />
     public Event Create(EventCreateDto dto)
     {
-        var (start, end) = ValidateDates(dto.StartAt, dto.EndAt);
-
-        if (dto.TotalSeats is null)
-            throw new ValidationException("TotalSeats обязателен.");
-
-        var totalSeats = dto.TotalSeats.Value;
-
-        if (totalSeats <= 0)
-            throw new ValidationException("TotalSeats должен быть больше нуля.");
-
-        var evt = new Event
-        {
-            Id = Guid.NewGuid(),
-            Title = dto.Title,
-            Description = dto.Description,
-            StartAt = start,
-            EndAt = end,
-            TotalSeats = totalSeats,
-            AvailableSeats = totalSeats
-        };
+        var evt = Event.Create(
+                title: dto.Title,
+                description: dto.Description,
+                startAt: dto.StartAt,
+                endAt: dto.EndAt,
+                totalSeats: dto.TotalSeats);
 
         while (!_storage.TryAdd(evt.Id, evt))
             evt.Id = Guid.NewGuid();

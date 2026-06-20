@@ -10,7 +10,8 @@ public class EventServiceTests
     string title = "Test",
     DateTime? start = null,
     DateTime? end = null,
-    string? description = null)
+    string? description = null,
+    int totalSeats = 10)
     {
         var s = start ?? new DateTime(2026, 06, 01, 10, 00, 00, DateTimeKind.Utc);
         var e = end ?? s.AddHours(1);
@@ -20,7 +21,8 @@ public class EventServiceTests
             Title = title,
             StartAt = s,   // DateTime (обязателен)
             EndAt = e,     // DateTime (обязателен)
-            Description = description
+            Description = description,
+            TotalSeats = totalSeats
         };
     }
 
@@ -54,6 +56,8 @@ public class EventServiceTests
         Assert.NotEqual(default, created.StartAt);
         Assert.NotEqual(default, created.EndAt);
         Assert.True(created.EndAt > created.StartAt);
+        Assert.Equal(created.TotalSeats, created.AvailableSeats);
+        Assert.Equal(10, created.TotalSeats);
     }
 
     [Fact]

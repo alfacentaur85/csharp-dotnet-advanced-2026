@@ -13,6 +13,9 @@ public sealed class BookingProcessingBackgroundService : BackgroundService
     // асинхронная защита критической секции записи/обновления
     private readonly SemaphoreSlim _processingSemaphore = new(1, 1);
 
+    private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ProcessingDelay = TimeSpan.FromSeconds(2);
+
     public BookingProcessingBackgroundService(
         IBookingService bookingService,
         IEventService eventService,
@@ -25,7 +28,6 @@ public sealed class BookingProcessingBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var pollInterval = TimeSpan.FromSeconds(1);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -46,14 +48,14 @@ public sealed class BookingProcessingBackgroundService : BackgroundService
                 _logger.LogError(ex, "Error while processing bookings batch");
             }
 
-            await Task.Delay(pollInterval, stoppingToken);
+            await Task.Delay(PollingInterval, stoppingToken);
         }
     }
 
     private async Task ProcessBookingAsync(Booking booking, CancellationToken stoppingToken)
     {
         // Имитация внешнего вызова — параллельно для всех броней
-        await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+        await Task.Delay(ProcessingDelay, stoppingToken);
 
         try
         {

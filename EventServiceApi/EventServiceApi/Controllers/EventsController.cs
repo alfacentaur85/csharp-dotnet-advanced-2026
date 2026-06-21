@@ -1,8 +1,9 @@
 using EventServiceApi.Dto;
+using EventServiceApi.Exceptions;
 using EventServiceApi.Interfaces;
+using EventServiceApi.Mappings;
 using EventServiceApi.Models;
 using Microsoft.AspNetCore.Mvc;
-using EventServiceApi.Mappings;
 
 namespace EventServiceApi.Controllers;
 
@@ -88,12 +89,12 @@ public class EventsController : ControllerBase
     /// <param name="id">Идентификатор мероприятия.</param>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public ActionResult<EventResponseDto> GetById(Guid id)
     {
         var evt = _eventService.GetById(id);
         if (evt is null)
-            return NotFound();
+            throw new NotFoundException("Event not found.");
 
         return Ok(ToResponseDto(evt));
     }
@@ -120,12 +121,12 @@ public class EventsController : ControllerBase
     [HttpPut("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public IActionResult Update(Guid id, [FromBody] EventUpdateDto dto)
     {
         var updated = _eventService.Update(id, dto);
         if (!updated)
-            return NotFound();
+            throw new NotFoundException("Event not found.");
 
         return NoContent();
     }
@@ -135,12 +136,12 @@ public class EventsController : ControllerBase
     /// </summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public IActionResult Delete(Guid id)
     {
         var deleted = _eventService.Delete(id);
         if (!deleted)
-            return NotFound();
+            throw new NotFoundException("Event not found.");
 
         return NoContent();
     }

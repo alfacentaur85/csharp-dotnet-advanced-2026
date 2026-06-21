@@ -52,7 +52,7 @@ public sealed class BookingService : IBookingService
     {
         lock (_bookingLock)
         {
-            var evt = _eventService.GetById(eventId) ?? throw new NotFoundException("Событие не найдено.");
+            var evt = _eventService.GetById(eventId) ?? throw new NotFoundException("Booking not found.");
 
             if (!evt.TryReserveSeats(1))
                 throw new NoAvailableSeatsException();

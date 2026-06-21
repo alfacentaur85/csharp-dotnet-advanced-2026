@@ -4,6 +4,47 @@
 
 ## Требования
 - .NET SDK 8.0+
+- PostgreSQL
+
+## Настройка строки подключения (PostgreSQL)
+
+Строка подключения задаётся через конфигурацию `ConnectionStrings:DefaultConnection`.
+
+### Вариант 1: appsettings.Development.json
+Добавьте/обновите:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=event_service;Username=postgres;Password=postgres"
+  }
+}
+```
+
+### Вариант 2: переменная окружения
+
+Windows (PowerShell):
+```
+$env:ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=event_service;Username=postgres;Password=postgres"
+```
+Linux/macOS:
+```
+export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=event_service;Username=postgres;Password=postgres"
+```
+
+### Автоматическое создание схемы БД
+При запуске приложения схема БД создаётся автоматически через EnsureCreated() (в Program.cs):
+```
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
+```
+
+### Тесты (EF Core InMemory)
+
+В тестах используется EF Core InMemory provider: AppDbContext настраивается через UseInMemoryDatabase(...) и поднимается через DI (ServiceCollection) с уникальным именем базы данных на тестовый класс, чтобы тесты не влияли друг на друга.
 
 ## Запуск
 Из корня проекта:

@@ -51,4 +51,9 @@ public class Booking
         Status = BookingStatus.Rejected;
         ProcessedAt = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// Навигационное свойство EF Core: событие, к которому относится бронь.
+    /// </summary>
+    public Event Event { get; private set; } = null!;
 }

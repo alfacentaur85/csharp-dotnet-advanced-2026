@@ -15,7 +15,6 @@ namespace EventServiceApi.Controllers;
 public class EventsController : ControllerBase
 {
     private readonly IEventService _eventService;
-
     private readonly IBookingService _bookingService;
 
     /// <summary>
@@ -47,23 +46,27 @@ public class EventsController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(PaginatedResult<EventResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult<PaginatedResult<EventResponseDto>> GetAll(
-       [FromQuery] string? title,
-       [FromQuery] DateTime? from,
-       [FromQuery] DateTime? to,
-       [FromQuery] int page = 1,
-       [FromQuery] int pageSize = 10)
+    public async Task<ActionResult<PaginatedResult<EventResponseDto>>> GetAll(
+        [FromQuery] string? title,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
     {
-        if (page < 1 || pageSize < 1)
+        var errors = new Dictionary<string, string[]>();
+
+        if (page < 1)
+            errors["page"] = new[] { "page должен быть >= 1" };
+
+        if (pageSize < 1)
+            errors["pageSize"] = new[] { "pageSize должен быть >= 1" };
+
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+            errors["dateRange"] = new[] { "Дата начала события не может быть больше даты окончания события" };
+
+        if (errors.Count > 0)
         {
-            var errors = new Dictionary<string, string[]>();
-
-            if (page < 1)
-                errors["page"] = new[] { "page должен быть >= 1" };
-
-            if (pageSize < 1)
-                errors["pageSize"] = new[] { "pageSize должен быть >= 1" };
-
             return BadRequest(new ValidationProblemDetails(errors)
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -73,7 +76,13 @@ public class EventsController : ControllerBase
             });
         }
 
-        var result = _eventService.GetAll(title, from, to, page, pageSize);
+        var result = await _eventService.GetAllAsync(
+            title: title,
+            from: from,
+            to: to,
+            page: page,
+            pageSize: pageSize,
+            cancellationToken: cancellationToken);
 
         return Ok(new PaginatedResult<EventResponseDto>
         {
@@ -83,6 +92,7 @@ public class EventsController : ControllerBase
             Items = result.Items.Select(ToResponseDto).ToList()
         });
     }
+
     /// <summary>
     /// Получить мероприятие по id.
     /// </summary>
@@ -90,9 +100,11 @@ public class EventsController : ControllerBase
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public ActionResult<EventResponseDto> GetById(Guid id)
+    public async Task<ActionResult<EventResponseDto>> GetById(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
-        var evt = _eventService.GetById(id);
+        var evt = await _eventService.GetByIdAsync(id, cancellationToken);
         if (evt is null)
             throw new NotFoundException("Event not found.");
 
@@ -105,9 +117,11 @@ public class EventsController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult<EventResponseDto> Create([FromBody] EventCreateDto dto)
+    public async Task<ActionResult<EventResponseDto>> Create(
+        [FromBody] EventCreateDto dto,
+        CancellationToken cancellationToken = default)
     {
-        var created = _eventService.Create(dto);
+        var created = await _eventService.CreateAsync(dto, cancellationToken);
 
         return CreatedAtAction(
             nameof(GetById),
@@ -122,9 +136,12 @@ public class EventsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public IActionResult Update(Guid id, [FromBody] EventUpdateDto dto)
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] EventUpdateDto dto,
+        CancellationToken cancellationToken = default)
     {
-        var updated = _eventService.Update(id, dto);
+        var updated = await _eventService.UpdateAsync(id, dto, cancellationToken);
         if (!updated)
             throw new NotFoundException("Event not found.");
 
@@ -137,9 +154,11 @@ public class EventsController : ControllerBase
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public IActionResult Delete(Guid id)
+    public async Task<IActionResult> Delete(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
-        var deleted = _eventService.Delete(id);
+        var deleted = await _eventService.DeleteAsync(id, cancellationToken);
         if (!deleted)
             throw new NotFoundException("Event not found.");
 
@@ -153,15 +172,16 @@ public class EventsController : ControllerBase
     [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<BookingResponseDto>> Book(Guid id)
+    public async Task<ActionResult<BookingResponseDto>> Book(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
-        var booking = await _bookingService.CreateBookingAsync(id);
+        var booking = await _bookingService.CreateBookingAsync(id, cancellationToken);
 
         return AcceptedAtAction(
-         actionName: nameof(BookingsController.GetById),
-         controllerName: "Bookings",
-         routeValues: new { id = booking.Id },
-         value: booking.ToResponseDto()
-     );
+            actionName: nameof(BookingsController.GetById),
+            controllerName: "Bookings",
+            routeValues: new { id = booking.Id },
+            value: booking.ToResponseDto());
     }
 }

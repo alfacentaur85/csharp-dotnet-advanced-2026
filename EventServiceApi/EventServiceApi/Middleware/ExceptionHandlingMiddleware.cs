@@ -1,6 +1,7 @@
+using EventServiceApi.Exceptions;
+using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
 
 namespace EventServiceApi.Middleware;
 
@@ -52,6 +53,18 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
                 title = "Not Found";
                 detail = knf.Message;
                 break;
+
+            case NotFoundException nf:
+                statusCode = StatusCodes.Status404NotFound;
+                title = "Not Found";
+                detail = nf.Message;
+                break;
+
+            case NoAvailableSeatsException nase:
+                statusCode = StatusCodes.Status409Conflict;
+                title = "Conflict";
+                detail = nase.Message;
+                break;
         }
 
         // Логирование: 5xx как Error, 4xx как Warning
@@ -62,6 +75,7 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
 
         var problem = new ProblemDetails
         {
+            Type = "about:blank",
             Status = statusCode,
             Title = title,
             Detail = detail,

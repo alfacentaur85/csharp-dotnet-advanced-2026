@@ -11,4 +11,5 @@ public interface IBookingService
     Task<IReadOnlyCollection<Booking>> GetPendingBookingsAsync();
     Task<bool> TryUpdateBookingAsync(Booking booking);
     Task<bool> TryProcessPendingAsync(Guid bookingId);
+    Task<bool> TryRejectPendingAsync(Guid bookingId, string? reason = null);
 }

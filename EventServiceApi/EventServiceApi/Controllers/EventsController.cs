@@ -1,8 +1,9 @@
 using EventServiceApi.Dto;
+using EventServiceApi.Exceptions;
 using EventServiceApi.Interfaces;
+using EventServiceApi.Mappings;
 using EventServiceApi.Models;
 using Microsoft.AspNetCore.Mvc;
-using EventServiceApi.Mappings;
 
 namespace EventServiceApi.Controllers;
 
@@ -32,7 +33,9 @@ public class EventsController : ControllerBase
         Title = evt.Title,
         Description = evt.Description,
         StartAt = evt.StartAt,
-        EndAt = evt.EndAt
+        EndAt = evt.EndAt,
+        TotalSeats = evt.TotalSeats,
+        AvailableSeats = evt.AvailableSeats
     };
 
     /// <summary>
@@ -51,8 +54,24 @@ public class EventsController : ControllerBase
        [FromQuery] int page = 1,
        [FromQuery] int pageSize = 10)
     {
-        if (page < 1) return BadRequest("page должен быть >= 1");
-        if (pageSize < 1) return BadRequest("pageSize должен быть >= 1");
+        if (page < 1 || pageSize < 1)
+        {
+            var errors = new Dictionary<string, string[]>();
+
+            if (page < 1)
+                errors["page"] = new[] { "page должен быть >= 1" };
+
+            if (pageSize < 1)
+                errors["pageSize"] = new[] { "pageSize должен быть >= 1" };
+
+            return BadRequest(new ValidationProblemDetails(errors)
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Bad Request",
+                Detail = "Ошибки валидации.",
+                Instance = HttpContext.Request.Path
+            });
+        }
 
         var result = _eventService.GetAll(title, from, to, page, pageSize);
 
@@ -70,12 +89,12 @@ public class EventsController : ControllerBase
     /// <param name="id">Идентификатор мероприятия.</param>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public ActionResult<EventResponseDto> GetById(Guid id)
     {
         var evt = _eventService.GetById(id);
         if (evt is null)
-            return NotFound();
+            throw new NotFoundException("Event not found.");
 
         return Ok(ToResponseDto(evt));
     }
@@ -86,7 +105,7 @@ public class EventsController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public ActionResult<EventResponseDto> Create([FromBody] EventCreateUpdateDto dto)
+    public ActionResult<EventResponseDto> Create([FromBody] EventCreateDto dto)
     {
         var created = _eventService.Create(dto);
 
@@ -102,12 +121,12 @@ public class EventsController : ControllerBase
     [HttpPut("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult Update(Guid id, [FromBody] EventCreateUpdateDto dto)
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public IActionResult Update(Guid id, [FromBody] EventUpdateDto dto)
     {
         var updated = _eventService.Update(id, dto);
         if (!updated)
-            return NotFound();
+            throw new NotFoundException("Event not found.");
 
         return NoContent();
     }
@@ -117,12 +136,12 @@ public class EventsController : ControllerBase
     /// </summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public IActionResult Delete(Guid id)
     {
         var deleted = _eventService.Delete(id);
         if (!deleted)
-            return NotFound();
+            throw new NotFoundException("Event not found.");
 
         return NoContent();
     }
@@ -133,6 +152,7 @@ public class EventsController : ControllerBase
     [HttpPost("{id:guid}/book")]
     [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BookingResponseDto>> Book(Guid id)
     {
         var booking = await _bookingService.CreateBookingAsync(id);

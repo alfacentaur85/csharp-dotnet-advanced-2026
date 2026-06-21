@@ -27,4 +27,28 @@ public class Booking
 
     /// <summary>Дата и время обработки брони (опционально).</summary>
     public DateTime? ProcessedAt { get; set; }
+
+    /// <summary>
+    /// Переводит бронь в статус <see cref="BookingStatus.Confirmed"/> и устанавливает <see cref="ProcessedAt"/> (UTC).
+    /// </summary>
+    /// <remarks>
+    /// Предполагается, что метод вызывается при обработке брони (обычно из состояния Pending).
+    /// </remarks>
+    public void Confirm()
+    {
+        Status = BookingStatus.Confirmed;
+        ProcessedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Переводит бронь в статус <see cref="BookingStatus.Rejected"/> и устанавливает <see cref="ProcessedAt"/> (UTC).
+    /// </summary>
+    /// <remarks>
+    /// Используется, если бронь не может быть подтверждена (например, событие удалено или произошла ошибка обработки).
+    /// </remarks>
+    public void Reject()
+    {
+        Status = BookingStatus.Rejected;
+        ProcessedAt = DateTime.UtcNow;
+    }
 }

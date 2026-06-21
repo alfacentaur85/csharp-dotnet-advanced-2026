@@ -6,7 +6,27 @@ namespace EventServiceApi.Tests;
 
 public class EventServiceTests
 {
-    private static EventCreateUpdateDto ValidDto(
+    private static EventCreateDto CreateValidDto(
+    string title = "Test",
+    DateTime? start = null,
+    DateTime? end = null,
+    string? description = null,
+    int totalSeats = 10)
+    {
+        var s = start ?? new DateTime(2026, 06, 01, 10, 00, 00, DateTimeKind.Utc);
+        var e = end ?? s.AddHours(1);
+
+        return new EventCreateDto
+        {
+            Title = title,
+            StartAt = s,   // DateTime (обязателен)
+            EndAt = e,     // DateTime (обязателен)
+            Description = description,
+            TotalSeats = totalSeats
+        };
+    }
+
+    private static EventUpdateDto UpdateValidDto(
     string title = "Test",
     DateTime? start = null,
     DateTime? end = null,
@@ -15,7 +35,7 @@ public class EventServiceTests
         var s = start ?? new DateTime(2026, 06, 01, 10, 00, 00, DateTimeKind.Utc);
         var e = end ?? s.AddHours(1);
 
-        return new EventCreateUpdateDto
+        return new EventUpdateDto
         {
             Title = title,
             StartAt = s,   // DateTime (обязателен)
@@ -29,21 +49,23 @@ public class EventServiceTests
     {
         var service = new EventService();
 
-        var created = service.Create(ValidDto(title: "My event"));
+        var created = service.Create(CreateValidDto(title: "My event"));
 
         Assert.NotEqual(Guid.Empty, created.Id);
         Assert.Equal("My event", created.Title);
         Assert.NotEqual(default, created.StartAt);
         Assert.NotEqual(default, created.EndAt);
         Assert.True(created.EndAt > created.StartAt);
+        Assert.Equal(created.TotalSeats, created.AvailableSeats);
+        Assert.Equal(10, created.TotalSeats);
     }
 
     [Fact]
     public void GetAll_ShouldReturnAllEvents()
     {
         var service = new EventService();
-        service.Create(ValidDto(title: "A", start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc)));
-        service.Create(ValidDto(title: "B", start: new DateTime(2026, 06, 02, 10, 0, 0, DateTimeKind.Utc)));
+        service.Create(CreateValidDto(title: "A", start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc)));
+        service.Create(CreateValidDto(title: "B", start: new DateTime(2026, 06, 02, 10, 0, 0, DateTimeKind.Utc)));
 
         var result = service.GetAll();
 
@@ -55,7 +77,7 @@ public class EventServiceTests
     public void GetById_ShouldReturnEvent_WhenExists()
     {
         var service = new EventService();
-        var created = service.Create(ValidDto(title: "Find me"));
+        var created = service.Create(CreateValidDto(title: "Find me"));
 
         var found = service.GetById(created.Id);
 
@@ -77,9 +99,9 @@ public class EventServiceTests
     public void Update_ShouldUpdateExistingEvent()
     {
         var service = new EventService();
-        var created = service.Create(ValidDto(title: "Old"));
+        var created = service.Create(CreateValidDto(title: "Old"));
 
-        var ok = service.Update(created.Id, ValidDto(title: "New"));
+        var ok = service.Update(created.Id, UpdateValidDto(title: "New"));
 
         Assert.True(ok);
         Assert.Equal("New", service.GetById(created.Id)!.Title);
@@ -90,7 +112,7 @@ public class EventServiceTests
     {
         var service = new EventService();
 
-        var ok = service.Update(Guid.NewGuid(), ValidDto(title: "New"));
+        var ok = service.Update(Guid.NewGuid(), UpdateValidDto(title: "New"));
 
         Assert.False(ok);
     }
@@ -99,7 +121,7 @@ public class EventServiceTests
     public void Delete_ShouldDeleteExistingEvent()
     {
         var service = new EventService();
-        var created = service.Create(ValidDto(title: "To delete"));
+        var created = service.Create(CreateValidDto(title: "To delete"));
 
         var ok = service.Delete(created.Id);
 
@@ -121,8 +143,8 @@ public class EventServiceTests
     public void Filter_ByTitle_ShouldBeCaseInsensitive_AndPartial()
     {
         var service = new EventService();
-        service.Create(ValidDto(title: "DotNet Conf"));
-        service.Create(ValidDto(title: "Java Meetup"));
+        service.Create(CreateValidDto(title: "DotNet Conf"));
+        service.Create(CreateValidDto(title: "Java Meetup"));
 
         var result = service.GetAll(title: "conf");
 
@@ -136,17 +158,17 @@ public class EventServiceTests
     {
         var service = new EventService();
 
-        service.Create(ValidDto(
+        service.Create(CreateValidDto(
             title: "E1",
             start: new DateTime(2026, 06, 10, 10, 0, 0, DateTimeKind.Utc),
             end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)));
 
-        service.Create(ValidDto(
+        service.Create(CreateValidDto(
             title: "E2",
             start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
             end: new DateTime(2026, 06, 01, 11, 0, 0, DateTimeKind.Utc)));
 
-        service.Create(ValidDto(
+        service.Create(CreateValidDto(
             title: "E3",
             start: new DateTime(2026, 06, 20, 10, 0, 0, DateTimeKind.Utc),
             end: new DateTime(2026, 06, 25, 11, 0, 0, DateTimeKind.Utc)));
@@ -168,7 +190,7 @@ public class EventServiceTests
 
         for (int i = 1; i <= 12; i++)
         {
-            service.Create(ValidDto(
+            service.Create(CreateValidDto(
                 title: $"E{i}",
                 start: new DateTime(2026, 06, i, 10, 0, 0, DateTimeKind.Utc),
                 end: new DateTime(2026, 06, i, 11, 0, 0, DateTimeKind.Utc)));
@@ -189,17 +211,17 @@ public class EventServiceTests
     {
         var service = new EventService();
 
-        service.Create(ValidDto(
+        service.Create(CreateValidDto(
             title: "Conf Moscow",
             start: new DateTime(2026, 06, 10, 10, 0, 0, DateTimeKind.Utc),
             end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)));
 
-        service.Create(ValidDto(
+        service.Create(CreateValidDto(
             title: "Conf SPB",
             start: new DateTime(2026, 07, 10, 10, 0, 0, DateTimeKind.Utc),
             end: new DateTime(2026, 07, 10, 11, 0, 0, DateTimeKind.Utc)));
 
-        service.Create(ValidDto(
+        service.Create(CreateValidDto(
             title: "Meetup Moscow",
             start: new DateTime(2026, 06, 10, 10, 0, 0, DateTimeKind.Utc),
             end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)));
@@ -220,10 +242,10 @@ public class EventServiceTests
     public void Update_WithEndBeforeStart_ShouldThrowValidationException()
     {
         var service = new EventService();
-        var id = service.Create(ValidDto()).Id;
+        var id = service.Create(CreateValidDto()).Id;
 
         Assert.Throws<ValidationException>(() =>
-            service.Update(id, ValidDto(
+            service.Update(id, UpdateValidDto(
                 start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
                 end: new DateTime(2026, 06, 01, 9, 0, 0, DateTimeKind.Utc)
             )));

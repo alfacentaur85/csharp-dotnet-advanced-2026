@@ -1,7 +1,8 @@
-using System.Collections.Concurrent;
 using EventServiceApi.Enums;
+using EventServiceApi.Exceptions;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
+using System.Collections.Concurrent;
 
 namespace EventServiceApi.Services;
 
@@ -10,30 +11,66 @@ public sealed class BookingService : IBookingService
     private readonly ConcurrentDictionary<Guid, Booking> _storage = new();
     private readonly IEventService _eventService;
 
+    private readonly object _bookingLock = new();
+
     public BookingService(IEventService eventService)
     {
         _eventService = eventService;
     }
+    public Task<bool> TryRejectPendingAsync(Guid bookingId, string? reason = null)
+    {
+        lock (_bookingLock)
+        {
+            if (!_storage.TryGetValue(bookingId, out var current))
+                return Task.FromResult(false);
+
+            if (current.Status != BookingStatus.Pending)
+                return Task.FromResult(false);
+
+            // событие могло быть удалено — тогда место вернуть некуда
+            var evt = _eventService.GetById(current.EventId);
+            if (evt is not null)
+            {
+                evt.ReleaseSeats(1);
+            }
+
+            var rejected = new Booking
+            {
+                Id = current.Id,
+                EventId = current.EventId,
+                Status = BookingStatus.Rejected,
+                CreatedAt = current.CreatedAt,
+                ProcessedAt = DateTime.UtcNow
+            };
+
+            _storage[bookingId] = rejected;
+            return Task.FromResult(true);
+        }
+    }
 
     public Task<Booking> CreateBookingAsync(Guid eventId)
     {
-        // Проверка существования события (нужна для 404/ошибки и для тестов)
-        if (_eventService.GetById(eventId) is null)
-            throw new KeyNotFoundException("Событие не найдено.");
-
-        var booking = new Booking
+        lock (_bookingLock)
         {
-            Id = Guid.NewGuid(),
-            EventId = eventId,
-            Status = BookingStatus.Pending,
-            CreatedAt = DateTime.UtcNow,
-            ProcessedAt = null
-        };
+            var evt = _eventService.GetById(eventId) ?? throw new NotFoundException("Booking not found.");
 
-        while (!_storage.TryAdd(booking.Id, booking))
-            booking.Id = Guid.NewGuid();
+            if (!evt.TryReserveSeats(1))
+                throw new NoAvailableSeatsException();
 
-        return Task.FromResult(booking);
+            var booking = new Booking
+            {
+                Id = Guid.NewGuid(),
+                EventId = eventId,
+                Status = BookingStatus.Pending,
+                CreatedAt = DateTime.UtcNow,
+                ProcessedAt = null
+            };
+
+            while (!_storage.TryAdd(booking.Id, booking))
+                booking.Id = Guid.NewGuid();
+
+            return Task.FromResult(booking);
+        }
     }
 
     public Task<Booking?> GetBookingByIdAsync(Guid bookingId)
@@ -66,7 +103,7 @@ public sealed class BookingService : IBookingService
     }
 
     /// <summary>
-    /// Атомарная обработка: если бронь всё ещё Pending — переводим в Approved и ставим ProcessedAt.
+    /// Атомарная обработка: если бронь всё ещё Pending — переводим в Confirmed и ставим ProcessedAt.
     /// Чтобы одну бронь не обработать дважды.
     /// </summary>
     public Task<bool> TryProcessPendingAsync(Guid bookingId)

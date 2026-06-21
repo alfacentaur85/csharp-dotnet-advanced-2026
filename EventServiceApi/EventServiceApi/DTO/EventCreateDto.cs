@@ -3,37 +3,29 @@ using System.ComponentModel.DataAnnotations;
 namespace EventServiceApi.Dto;
 
 /// <summary>
-/// DTO для создания/обновления мероприятия.
+/// DTO для создания мероприятия.
 /// </summary>
-public class EventCreateUpdateDto : IValidatableObject
+public class EventCreateDto : IValidatableObject
 {
-    /// <summary>
-    /// Заголовок мероприятия.
-    /// </summary>
     [Required(ErrorMessage = "Заголовок обязателен.")]
     [MinLength(1, ErrorMessage = "Заголовок не может быть пустым.")]
     public string Title { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Описание мероприятия.
-    /// </summary>
     public string? Description { get; set; }
 
-    /// <summary>
-    /// Дата и время начала мероприятия.
-    /// </summary>
     [Required(ErrorMessage = "Дата начала обязательна.")]
     public DateTime StartAt { get; set; }
 
-    /// <summary>
-    /// Дата и время окончания мероприятия.
-    /// </summary>
     [Required(ErrorMessage = "Дата окончания обязательна.")]
     public DateTime EndAt { get; set; }
 
     /// <summary>
-    /// Кросс-полевая валидация: EndAt должен быть позже StartAt.
+    /// Общее количество мест (обязательно при создании).
     /// </summary>
+    [Required(ErrorMessage = "TotalSeats обязателен.")]
+    [Range(1, int.MaxValue, ErrorMessage = "TotalSeats должен быть >= 1.")]
+    public int? TotalSeats { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
         if (EndAt <= StartAt)

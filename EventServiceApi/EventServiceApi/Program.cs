@@ -2,7 +2,10 @@ using EventServiceApi.Interfaces;
 using EventServiceApi.Middleware;
 using EventServiceApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using EventServiceApi.DataAccess;
 using System.Reflection;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,8 +42,14 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 /// DI-регистрация сервисов приложения
-builder.Services.AddSingleton<IEventService, EventService>();
-builder.Services.AddSingleton<IBookingService, BookingService>();
+builder.Services.AddDbContext<AppDbContext>(options => 
+  options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+);
+
+builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddTransient<ExceptionHandlingMiddleware>();
 builder.Services.AddHostedService<BookingProcessingBackgroundService>();
 
@@ -52,6 +61,12 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
 }
 
 app.UseHttpsRedirection();

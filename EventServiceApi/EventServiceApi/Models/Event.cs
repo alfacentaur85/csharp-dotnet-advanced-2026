@@ -53,6 +53,11 @@ public class Event
     private readonly object _seatsLock = new();
 
     /// <summary>
+    /// Навигационное свойство EF Core: список бронирований, относящихся к событию.
+    /// </summary>
+    public List<Booking> Bookings { get; private set; } = [];
+
+    /// <summary>
     /// Пытается зарезервировать места на событие.
     /// </summary>
     /// <param name="count">Количество мест (по умолчанию 1).</param>

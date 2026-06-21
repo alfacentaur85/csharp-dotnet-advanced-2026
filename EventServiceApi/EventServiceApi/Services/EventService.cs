@@ -1,25 +1,31 @@
+using System.ComponentModel.DataAnnotations;
+using EventServiceApi.DataAccess;
 using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
-using System.Collections.Concurrent;
-using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace EventServiceApi.Services;
 
 /// <summary>
-/// Реализация сервиса мероприятий.
+/// Реализация сервиса мероприятий (EF Core).
 /// </summary>
-public class EventService : IEventService
+public sealed class EventService : IEventService
 {
-    private readonly ConcurrentDictionary<Guid, Event> _storage = new();
+    private readonly AppDbContext _context;
 
-    /// <inheritdoc />
-    public PaginatedResult<Event> GetAll(
+    public EventService(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<PaginatedResult<Event>> GetAllAsync(
         string? title = null,
         DateTime? from = null,
         DateTime? to = null,
         int page = 1,
-        int pageSize = 10)
+        int pageSize = 10,
+        CancellationToken cancellationToken = default)
     {
         if (from.HasValue && to.HasValue && from.Value > to.Value)
             throw new ArgumentException("Дата начала события не может быть больше даты окончания события");
@@ -27,13 +33,14 @@ public class EventService : IEventService
         if (page < 1) throw new ArgumentException("page должен быть >= 1");
         if (pageSize < 1) throw new ArgumentException("pageSize должен быть >= 1");
 
-        IEnumerable<Event> query = _storage.Values;
+        IQueryable<Event> query = _context.Events.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(title))
         {
             var t = title.Trim();
-            query = query.Where(e => e.Title != null &&
-                                     e.Title.Contains(t, StringComparison.OrdinalIgnoreCase));
+
+            // Для PostgreSQL можно заменить на ILIKE через EF.Functions.ILike(...)
+            query = query.Where(e => e.Title.Contains(t));
         }
 
         if (from.HasValue)
@@ -42,16 +49,13 @@ public class EventService : IEventService
         if (to.HasValue)
             query = query.Where(e => e.EndAt <= to.Value);
 
-        // Важно: сначала считаем общее количество после фильтрации
-        var totalCount = query.Count();
+        var totalCount = await query.CountAsync(cancellationToken);
 
-        // Стабильная сортировка перед пагинацией
-        query = query.OrderBy(e => e.StartAt).ThenBy(e => e.Id);
-
-        var items = query
+        var items = await query
+            .OrderBy(e => e.StartAt).ThenBy(e => e.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         return new PaginatedResult<Event>
         {
@@ -62,44 +66,42 @@ public class EventService : IEventService
         };
     }
 
-    /// <inheritdoc />
-    public Event? GetById(Guid id)
-        => _storage.TryGetValue(id, out var evt) ? evt : null;
+    public Task<Event?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.Events.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 
-    /// <inheritdoc />
-    public Event Create(EventCreateDto dto)
+    public async Task<Event> CreateAsync(EventCreateDto dto, CancellationToken cancellationToken = default)
     {
         var evt = Event.Create(
-                title: dto.Title,
-                description: dto.Description,
-                startAt: dto.StartAt,
-                endAt: dto.EndAt,
-                totalSeats: dto.TotalSeats);
+            title: dto.Title,
+            description: dto.Description,
+            startAt: dto.StartAt,
+            endAt: dto.EndAt,
+            totalSeats: dto.TotalSeats);
 
-        while (!_storage.TryAdd(evt.Id, evt))
-            evt.Id = Guid.NewGuid();
+        _context.Events.Add(evt);
+        await _context.SaveChangesAsync(cancellationToken);
 
         return evt;
     }
 
-    /// <inheritdoc />
-    public bool Update(Guid id, EventUpdateDto dto)
+    public async Task<bool> UpdateAsync(Guid id, EventUpdateDto dto, CancellationToken cancellationToken = default)
     {
-        if (!_storage.TryGetValue(id, out var existing))
+        var existing = await _context.Events
+            .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+
+        if (existing is null)
             return false;
 
-        var (start, end) = ValidateDates(dto.StartAt, dto.EndAt);
+        ValidateDates(dto.StartAt, dto.EndAt);
 
         // Сколько мест уже занято по текущему состоянию
         var occupied = existing.TotalSeats - existing.AvailableSeats;
-        if (occupied < 0) occupied = 0; // защита от неконсистентности
-
-        var newTotalSeats = existing.TotalSeats;
-        var newAvailableSeats = existing.AvailableSeats;
+        if (occupied < 0) occupied = 0;
 
         if (dto.TotalSeats.HasValue)
         {
-            newTotalSeats = dto.TotalSeats.Value;
+            var newTotalSeats = dto.TotalSeats.Value;
 
             if (newTotalSeats <= 0)
                 throw new ValidationException("TotalSeats должен быть больше нуля.");
@@ -107,45 +109,35 @@ public class EventService : IEventService
             if (newTotalSeats < occupied)
                 throw new ValidationException("Нельзя уменьшить TotalSeats ниже количества уже занятых мест.");
 
-            newAvailableSeats = newTotalSeats - occupied;
+            existing.TotalSeats = newTotalSeats;
+            existing.AvailableSeats = newTotalSeats - occupied;
         }
 
-        var updated = new Event
-        {
-            Id = id,
-            Title = dto.Title,
-            Description = dto.Description,
-            StartAt = start,
-            EndAt = end,
-            TotalSeats = newTotalSeats,
-            AvailableSeats = newAvailableSeats
-        };
+        existing.Title = dto.Title;
+        existing.Description = dto.Description;
+        existing.StartAt = dto.StartAt;
+        existing.EndAt = dto.EndAt;
 
-        _storage[id] = updated;
+        await _context.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    /// <inheritdoc />
-    public bool Delete(Guid id)
-        => _storage.TryRemove(id, out _);
-
-    /// <inheritdoc />
-    public bool TryUpdate(Event evt)
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        if (evt is null) throw new ArgumentNullException(nameof(evt));
+        var existing = await _context.Events
+            .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 
-        if (!_storage.ContainsKey(evt.Id))
+        if (existing is null)
             return false;
 
-        _storage[evt.Id] = evt;
+        _context.Events.Remove(existing);
+        await _context.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    private static (DateTime start, DateTime end) ValidateDates(DateTime start, DateTime end)
+    private static void ValidateDates(DateTime start, DateTime end)
     {
         if (end <= start)
             throw new ValidationException("Дата окончания должна быть позже даты начала.");
-
-        return (start, end);
     }
 }

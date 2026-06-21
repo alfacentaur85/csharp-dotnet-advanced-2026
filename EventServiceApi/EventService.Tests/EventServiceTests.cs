@@ -1,17 +1,19 @@
+
 using EventServiceApi.Dto;
-using EventServiceApi.Services;
+using EventServiceApi.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel.DataAnnotations;
 
 namespace EventServiceApi.Tests;
 
-public class EventServiceTests
+public class EventServiceTests : TestDiFixture
 {
     private static EventCreateDto CreateValidDto(
-    string title = "Test",
-    DateTime? start = null,
-    DateTime? end = null,
-    string? description = null,
-    int totalSeats = 10)
+        string title = "Test",
+        DateTime? start = null,
+        DateTime? end = null,
+        string? description = null,
+        int totalSeats = 10)
     {
         var s = start ?? new DateTime(2026, 06, 01, 10, 00, 00, DateTimeKind.Utc);
         var e = end ?? s.AddHours(1);
@@ -19,18 +21,19 @@ public class EventServiceTests
         return new EventCreateDto
         {
             Title = title,
-            StartAt = s,   // DateTime (обязателен)
-            EndAt = e,     // DateTime (обязателен)
+            StartAt = s,
+            EndAt = e,
             Description = description,
             TotalSeats = totalSeats
         };
     }
 
     private static EventUpdateDto UpdateValidDto(
-    string title = "Test",
-    DateTime? start = null,
-    DateTime? end = null,
-    string? description = null)
+        string title = "Test",
+        DateTime? start = null,
+        DateTime? end = null,
+        string? description = null,
+        int? totalSeats = null)
     {
         var s = start ?? new DateTime(2026, 06, 01, 10, 00, 00, DateTimeKind.Utc);
         var e = end ?? s.AddHours(1);
@@ -38,115 +41,150 @@ public class EventServiceTests
         return new EventUpdateDto
         {
             Title = title,
-            StartAt = s,   // DateTime (обязателен)
-            EndAt = e,     // DateTime (обязателен)
-            Description = description
+            StartAt = s,
+            EndAt = e,
+            Description = description,
+            TotalSeats = totalSeats
         };
     }
 
     [Fact]
-    public void Create_ShouldCreateEvent()
+    public async Task Create_ShouldCreateEvent()
     {
-        var service = new EventService();
+        var ct = CancellationToken.None;
 
-        var created = service.Create(CreateValidDto(title: "My event"));
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var created = await service.CreateAsync(CreateValidDto(title: "My event"), ct);
 
         Assert.NotEqual(Guid.Empty, created.Id);
         Assert.Equal("My event", created.Title);
-        Assert.NotEqual(default, created.StartAt);
-        Assert.NotEqual(default, created.EndAt);
         Assert.True(created.EndAt > created.StartAt);
-        Assert.Equal(created.TotalSeats, created.AvailableSeats);
         Assert.Equal(10, created.TotalSeats);
+        Assert.Equal(created.TotalSeats, created.AvailableSeats);
     }
 
     [Fact]
-    public void GetAll_ShouldReturnAllEvents()
+    public async Task GetAll_ShouldReturnAllEvents()
     {
-        var service = new EventService();
-        service.Create(CreateValidDto(title: "A", start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc)));
-        service.Create(CreateValidDto(title: "B", start: new DateTime(2026, 06, 02, 10, 0, 0, DateTimeKind.Utc)));
+        var ct = CancellationToken.None;
 
-        var result = service.GetAll();
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        await service.CreateAsync(CreateValidDto(title: "A", start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc)), ct);
+        await service.CreateAsync(CreateValidDto(title: "B", start: new DateTime(2026, 06, 02, 10, 0, 0, DateTimeKind.Utc)), ct);
+
+        var result = await service.GetAllAsync(cancellationToken: ct);
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(2, result.Items.Count);
     }
 
     [Fact]
-    public void GetById_ShouldReturnEvent_WhenExists()
+    public async Task GetById_ShouldReturnEvent_WhenExists()
     {
-        var service = new EventService();
-        var created = service.Create(CreateValidDto(title: "Find me"));
+        var ct = CancellationToken.None;
 
-        var found = service.GetById(created.Id);
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var created = await service.CreateAsync(CreateValidDto(title: "Find me"), ct);
+
+        var found = await service.GetByIdAsync(created.Id, ct);
 
         Assert.NotNull(found);
         Assert.Equal(created.Id, found!.Id);
     }
 
     [Fact]
-    public void GetById_ShouldReturnNull_WhenNotExists()
+    public async Task GetById_ShouldReturnNull_WhenNotExists()
     {
-        var service = new EventService();
+        var ct = CancellationToken.None;
 
-        var found = service.GetById(Guid.NewGuid());
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var found = await service.GetByIdAsync(Guid.NewGuid(), ct);
 
         Assert.Null(found);
     }
 
     [Fact]
-    public void Update_ShouldUpdateExistingEvent()
+    public async Task Update_ShouldUpdateExistingEvent()
     {
-        var service = new EventService();
-        var created = service.Create(CreateValidDto(title: "Old"));
+        var ct = CancellationToken.None;
 
-        var ok = service.Update(created.Id, UpdateValidDto(title: "New"));
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var created = await service.CreateAsync(CreateValidDto(title: "Old"), ct);
+
+        var ok = await service.UpdateAsync(created.Id, UpdateValidDto(title: "New"), ct);
 
         Assert.True(ok);
-        Assert.Equal("New", service.GetById(created.Id)!.Title);
+
+        var updated = await service.GetByIdAsync(created.Id, ct);
+        Assert.Equal("New", updated!.Title);
     }
 
     [Fact]
-    public void Update_ShouldReturnFalse_WhenEventNotExists()
+    public async Task Update_ShouldReturnFalse_WhenEventNotExists()
     {
-        var service = new EventService();
+        var ct = CancellationToken.None;
 
-        var ok = service.Update(Guid.NewGuid(), UpdateValidDto(title: "New"));
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var ok = await service.UpdateAsync(Guid.NewGuid(), UpdateValidDto(title: "New"), ct);
 
         Assert.False(ok);
     }
 
     [Fact]
-    public void Delete_ShouldDeleteExistingEvent()
+    public async Task Delete_ShouldDeleteExistingEvent()
     {
-        var service = new EventService();
-        var created = service.Create(CreateValidDto(title: "To delete"));
+        var ct = CancellationToken.None;
 
-        var ok = service.Delete(created.Id);
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var created = await service.CreateAsync(CreateValidDto(title: "To delete"), ct);
+
+        var ok = await service.DeleteAsync(created.Id, ct);
 
         Assert.True(ok);
-        Assert.Null(service.GetById(created.Id));
+
+        var after = await service.GetByIdAsync(created.Id, ct);
+        Assert.Null(after);
     }
 
     [Fact]
-    public void Delete_ShouldReturnFalse_WhenEventNotExists()
+    public async Task Delete_ShouldReturnFalse_WhenEventNotExists()
     {
-        var service = new EventService();
+        var ct = CancellationToken.None;
 
-        var ok = service.Delete(Guid.NewGuid());
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var ok = await service.DeleteAsync(Guid.NewGuid(), ct);
 
         Assert.False(ok);
     }
 
     [Fact]
-    public void Filter_ByTitle_ShouldBeCaseInsensitive_AndPartial()
+    public async Task Filter_ByTitle_ShouldBeCaseInsensitive_AndPartial()
     {
-        var service = new EventService();
-        service.Create(CreateValidDto(title: "DotNet Conf"));
-        service.Create(CreateValidDto(title: "Java Meetup"));
+        var ct = CancellationToken.None;
 
-        var result = service.GetAll(title: "conf");
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        await service.CreateAsync(CreateValidDto(title: "DotNet Conf"), ct);
+        await service.CreateAsync(CreateValidDto(title: "Java Meetup"), ct);
+
+        var result = await service.GetAllAsync(title: "Conf", cancellationToken: ct);
 
         Assert.Equal(1, result.TotalCount);
         Assert.Single(result.Items);
@@ -154,29 +192,32 @@ public class EventServiceTests
     }
 
     [Fact]
-    public void Filter_ByDates_ShouldWork()
+    public async Task Filter_ByDates_ShouldWork()
     {
-        var service = new EventService();
+        var ct = CancellationToken.None;
 
-        service.Create(CreateValidDto(
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        await service.CreateAsync(CreateValidDto(
             title: "E1",
             start: new DateTime(2026, 06, 10, 10, 0, 0, DateTimeKind.Utc),
-            end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)));
+            end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)), ct);
 
-        service.Create(CreateValidDto(
+        await service.CreateAsync(CreateValidDto(
             title: "E2",
             start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
-            end: new DateTime(2026, 06, 01, 11, 0, 0, DateTimeKind.Utc)));
+            end: new DateTime(2026, 06, 01, 11, 0, 0, DateTimeKind.Utc)), ct);
 
-        service.Create(CreateValidDto(
+        await service.CreateAsync(CreateValidDto(
             title: "E3",
             start: new DateTime(2026, 06, 20, 10, 0, 0, DateTimeKind.Utc),
-            end: new DateTime(2026, 06, 25, 11, 0, 0, DateTimeKind.Utc)));
+            end: new DateTime(2026, 06, 25, 11, 0, 0, DateTimeKind.Utc)), ct);
 
         var from = new DateTime(2026, 06, 05, 0, 0, 0, DateTimeKind.Utc);
         var to = new DateTime(2026, 06, 15, 23, 59, 59, DateTimeKind.Utc);
 
-        var result = service.GetAll(from: from, to: to);
+        var result = await service.GetAllAsync(from: from, to: to, cancellationToken: ct);
 
         Assert.Equal(1, result.TotalCount);
         Assert.Single(result.Items);
@@ -184,19 +225,22 @@ public class EventServiceTests
     }
 
     [Fact]
-    public void Pagination_ShouldReturnCorrectPage()
+    public async Task Pagination_ShouldReturnCorrectPage()
     {
-        var service = new EventService();
+        var ct = CancellationToken.None;
+
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
 
         for (int i = 1; i <= 12; i++)
         {
-            service.Create(CreateValidDto(
+            await service.CreateAsync(CreateValidDto(
                 title: $"E{i}",
                 start: new DateTime(2026, 06, i, 10, 0, 0, DateTimeKind.Utc),
-                end: new DateTime(2026, 06, i, 11, 0, 0, DateTimeKind.Utc)));
+                end: new DateTime(2026, 06, i, 11, 0, 0, DateTimeKind.Utc)), ct);
         }
 
-        var page2 = service.GetAll(page: 2, pageSize: 5);
+        var page2 = await service.GetAllAsync(page: 2, pageSize: 5, cancellationToken: ct);
 
         Assert.Equal(12, page2.TotalCount);
         Assert.Equal(2, page2.Page);
@@ -207,31 +251,35 @@ public class EventServiceTests
     }
 
     [Fact]
-    public void CombinedFiltering_ShouldWorkTogether()
+    public async Task CombinedFiltering_ShouldWorkTogether()
     {
-        var service = new EventService();
+        var ct = CancellationToken.None;
 
-        service.Create(CreateValidDto(
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        await service.CreateAsync(CreateValidDto(
             title: "Conf Moscow",
             start: new DateTime(2026, 06, 10, 10, 0, 0, DateTimeKind.Utc),
-            end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)));
+            end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)), ct);
 
-        service.Create(CreateValidDto(
+        await service.CreateAsync(CreateValidDto(
             title: "Conf SPB",
             start: new DateTime(2026, 07, 10, 10, 0, 0, DateTimeKind.Utc),
-            end: new DateTime(2026, 07, 10, 11, 0, 0, DateTimeKind.Utc)));
+            end: new DateTime(2026, 07, 10, 11, 0, 0, DateTimeKind.Utc)), ct);
 
-        service.Create(CreateValidDto(
+        await service.CreateAsync(CreateValidDto(
             title: "Meetup Moscow",
             start: new DateTime(2026, 06, 10, 10, 0, 0, DateTimeKind.Utc),
-            end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)));
+            end: new DateTime(2026, 06, 10, 11, 0, 0, DateTimeKind.Utc)), ct);
 
-        var result = service.GetAll(
-            title: "conf",
+        var result = await service.GetAllAsync(
+            title: "Conf",
             from: new DateTime(2026, 06, 01, 0, 0, 0, DateTimeKind.Utc),
             to: new DateTime(2026, 06, 30, 23, 59, 59, DateTimeKind.Utc),
             page: 1,
-            pageSize: 10);
+            pageSize: 10,
+            cancellationToken: ct);
 
         Assert.Equal(1, result.TotalCount);
         Assert.Single(result.Items);
@@ -239,15 +287,19 @@ public class EventServiceTests
     }
 
     [Fact]
-    public void Update_WithEndBeforeStart_ShouldThrowValidationException()
+    public async Task Update_WithEndBeforeStart_ShouldThrowValidationException()
     {
-        var service = new EventService();
-        var id = service.Create(CreateValidDto()).Id;
+        var ct = CancellationToken.None;
 
-        Assert.Throws<ValidationException>(() =>
-            service.Update(id, UpdateValidDto(
+        using var scope = ServiceProvider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IEventService>();
+
+        var id = (await service.CreateAsync(CreateValidDto(), ct)).Id;
+
+        await Assert.ThrowsAsync<ValidationException>(async () =>
+            await service.UpdateAsync(id, UpdateValidDto(
                 start: new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
                 end: new DateTime(2026, 06, 01, 9, 0, 0, DateTimeKind.Utc)
-            )));
+            ), ct));
     }
 }

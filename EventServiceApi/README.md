@@ -5,6 +5,7 @@
 ## Требования
 - .NET SDK 8.0+
 - PostgreSQL
+- Docker — для запуска интеграционных тестов (см. раздел «Тесты»)
 
 ## Настройка строки подключения (PostgreSQL)
 
@@ -32,19 +33,39 @@ Linux/macOS:
 export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=event_service;Username=postgres;Password=postgres"
 ```
 
-### Автоматическое создание схемы БД
-При запуске приложения схема БД создаётся автоматически через EnsureCreated() (в Program.cs):
-```
+### Схема БД управляется миграциями EF Core
+
+Схема базы данных описывается миграциями EF Core (папка `EventServiceApi/DataAccess/Migrations`), а не создаётся "на лету" через `EnsureCreated()`. При запуске приложения все ещё не применённые миграции накатываются автоматически (в `Program.cs`):
+```csharp
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 ```
 
-### Тесты (EF Core InMemory)
+#### Инструмент dotnet-ef
 
-В тестах используется EF Core InMemory provider: AppDbContext настраивается через UseInMemoryDatabase(...) и поднимается через DI (ServiceCollection) с уникальным именем базы данных на тестовый класс, чтобы тесты не влияли друг на друга.
+Если `dotnet-ef` ещё не установлен глобально:
+```bash
+dotnet tool install --global dotnet-ef
+```
+
+#### Создание новой миграции
+
+После изменения моделей (`Event`, `Booking`) или конфигураций EF Core (`IEntityTypeConfiguration<T>`) создайте миграцию из корня репозитория:
+```bash
+dotnet ef migrations add <ИмяМиграции> --project EventServiceApi --startup-project EventServiceApi
+```
+
+#### Применение миграций к базе данных
+
+Накатить все не применённые миграции на БД, указанную в `ConnectionStrings:DefaultConnection`:
+```bash
+dotnet ef database update --project EventServiceApi --startup-project EventServiceApi
+```
+
+Вручную это делать не обязательно — то же самое произойдёт автоматически при старте приложения (`db.Database.Migrate()` в `Program.cs`).
 
 ## Запуск
 Из корня проекта:
@@ -201,9 +222,34 @@ Content-Type: application/json
 409 Conflict - при отсутствии мест
 
 ## Тесты
-Тесты написаны на xUnit в отдельном проекте (например, EventService.Tests).
 
-Запуск тестов из корня решения/репозитория:
+В решении два тестовых проекта:
+
+### Unit-тесты (EventService.Tests)
+
+Тесты написаны на xUnit и используют EF Core InMemory provider: `AppDbContext` настраивается через `UseInMemoryDatabase(...)` и поднимается через DI (`ServiceCollection`) с уникальным именем базы данных на тестовый класс, чтобы тесты не влияли друг на друга.
+
+```bash
+dotnet test EventService.Tests
+```
+
+### Интеграционные тесты (EventApi.IntegrationTests)
+
+Тесты репозиториев (`EventRepository`, `BookingRepository`) написаны на xUnit и запускаются против **реального PostgreSQL**, поднятого автоматически через [Testcontainers](https://dotnet.testcontainers.org/) — Docker-образ `postgres:16-alpine` стартует и останавливается самим тестовым прогоном, вручную поднимать контейнер (`docker compose up`) не нужно.
+
+**Требуется установленный и запущенный Docker** (Docker Desktop на Windows/macOS или Docker Engine на Linux) — без него тесты не смогут поднять контейнер и упадут при старте.
+
+Особенности:
+- один контейнер PostgreSQL используется всеми тестами прогона (xUnit collection fixture);
+- перед каждым тестом база приводится к чистому состоянию (`EnsureDeleted()` + `Migrate()`), поэтому тесты изолированы и не зависят от порядка запуска.
+
+```bash
+dotnet test EventApi.IntegrationTests
+```
+
+### Все тесты сразу
+
+Запуск из корня репозитория (потребует Docker для интеграционных тестов):
 
 ```bash
 dotnet test

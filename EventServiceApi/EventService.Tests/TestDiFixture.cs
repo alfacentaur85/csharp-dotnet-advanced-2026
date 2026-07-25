@@ -1,4 +1,5 @@
 using EventServiceApi.DataAccess;
+using EventServiceApi.DataAccess.Repositories;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Services;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,10 @@ public abstract class TestDiFixture : IDisposable
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseInMemoryDatabase(DbName));
+
+        services.AddScoped<IEventRepository, EventRepository>();
+        services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IEventService, EventService>();
         services.AddScoped<IBookingService, BookingService>();

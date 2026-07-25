@@ -1,6 +1,5 @@
 <Solution>
+  <Project Path="EventApi.IntegrationTests/EventApi.IntegrationTests.csproj" />
   <Project Path="EventService.Tests/EventService.Tests.csproj" />
-  <Project Path="EventServiceApi/EventServiceApi.csproj">
-    <BuildType Project="Release" />
-  </Project>
+  <Project Path="EventServiceApi/EventServiceApi.csproj" />
 </Solution>

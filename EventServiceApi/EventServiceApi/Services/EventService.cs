@@ -1,22 +1,22 @@
 using System.ComponentModel.DataAnnotations;
-using EventServiceApi.DataAccess;
 using EventServiceApi.Dto;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace EventServiceApi.Services;
 
 /// <summary>
-/// Реализация сервиса мероприятий (EF Core).
+/// Реализация сервиса мероприятий (бизнес-логика; доступ к данным — через IEventRepository).
 /// </summary>
 public sealed class EventService : IEventService
 {
-    private readonly AppDbContext _context;
+    private readonly IEventRepository _eventRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public EventService(AppDbContext context)
+    public EventService(IEventRepository eventRepository, IUnitOfWork unitOfWork)
     {
-        _context = context;
+        _eventRepository = eventRepository;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<PaginatedResult<Event>> GetAllAsync(
@@ -33,29 +33,7 @@ public sealed class EventService : IEventService
         if (page < 1) throw new ArgumentException("page должен быть >= 1");
         if (pageSize < 1) throw new ArgumentException("pageSize должен быть >= 1");
 
-        IQueryable<Event> query = _context.Events.AsNoTracking();
-
-        if (!string.IsNullOrWhiteSpace(title))
-        {
-            var t = title.Trim();
-
-            // Для PostgreSQL можно заменить на ILIKE через EF.Functions.ILike(...)
-            query = query.Where(e => e.Title.Contains(t));
-        }
-
-        if (from.HasValue)
-            query = query.Where(e => e.StartAt >= from.Value);
-
-        if (to.HasValue)
-            query = query.Where(e => e.EndAt <= to.Value);
-
-        var totalCount = await query.CountAsync(cancellationToken);
-
-        var items = await query
-            .OrderBy(e => e.StartAt).ThenBy(e => e.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
+        var (items, totalCount) = await _eventRepository.GetPagedAsync(title, from, to, page, pageSize, cancellationToken);
 
         return new PaginatedResult<Event>
         {
@@ -67,8 +45,7 @@ public sealed class EventService : IEventService
     }
 
     public Task<Event?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-        => _context.Events.AsNoTracking()
-            .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        => _eventRepository.GetByIdAsync(id, cancellationToken);
 
     public async Task<Event> CreateAsync(EventCreateDto dto, CancellationToken cancellationToken = default)
     {
@@ -79,16 +56,15 @@ public sealed class EventService : IEventService
             endAt: dto.EndAt,
             totalSeats: dto.TotalSeats);
 
-        _context.Events.Add(evt);
-        await _context.SaveChangesAsync(cancellationToken);
+        _eventRepository.Add(evt);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return evt;
     }
 
     public async Task<bool> UpdateAsync(Guid id, EventUpdateDto dto, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Events
-            .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        var existing = await _eventRepository.GetByIdTrackedAsync(id, cancellationToken);
 
         if (existing is null)
             return false;
@@ -118,20 +94,19 @@ public sealed class EventService : IEventService
         existing.StartAt = dto.StartAt;
         existing.EndAt = dto.EndAt;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Events
-            .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+        var existing = await _eventRepository.GetByIdTrackedAsync(id, cancellationToken);
 
         if (existing is null)
             return false;
 
-        _context.Events.Remove(existing);
-        await _context.SaveChangesAsync(cancellationToken);
+        _eventRepository.Remove(existing);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
     }
 

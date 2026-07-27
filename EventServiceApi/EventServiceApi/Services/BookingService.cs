@@ -1,21 +1,29 @@
-using EventServiceApi.DataAccess;
 using EventServiceApi.Enums;
 using EventServiceApi.Exceptions;
 using EventServiceApi.Interfaces;
 using EventServiceApi.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace EventServiceApi.Services;
 
+/// <summary>
+/// Реализация сервиса броней (бизнес-логика и конкурентность; доступ к данным — через репозитории).
+/// </summary>
 public sealed class BookingService : IBookingService
 {
-    private readonly AppDbContext _context;
+    private readonly IBookingRepository _bookingRepository;
+    private readonly IEventRepository _eventRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
     private static readonly SemaphoreSlim _bookingSemaphore = new(1, 1);
 
-    public BookingService(AppDbContext context)
+    public BookingService(
+        IBookingRepository bookingRepository,
+        IEventRepository eventRepository,
+        IUnitOfWork unitOfWork)
     {
-        _context = context;
+        _bookingRepository = bookingRepository;
+        _eventRepository = eventRepository;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<Booking> CreateBookingAsync(Guid eventId, CancellationToken cancellationToken = default)
@@ -23,9 +31,8 @@ public sealed class BookingService : IBookingService
         await _bookingSemaphore.WaitAsync(cancellationToken);
         try
         {
-            // ВАЖНО: без AsNoTracking, чтобы Event отслеживался и изменение AvailableSeats сохранилось.
-            var evt = await _context.Events
-                .FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+            // ВАЖНО: отслеживаемая сущность, чтобы изменение AvailableSeats сохранилось.
+            var evt = await _eventRepository.GetByIdTrackedAsync(eventId, cancellationToken);
 
             if (evt is null)
                 throw new NotFoundException("Event not found.");
@@ -42,10 +49,10 @@ public sealed class BookingService : IBookingService
                 ProcessedAt = null
             };
 
-            _context.Bookings.Add(booking);
+            _bookingRepository.Add(booking);
 
-            // Один SaveChangesAsync сохранит и бронь, и изменение AvailableSeats у evt (оба отслеживаются).
-            await _context.SaveChangesAsync(cancellationToken);
+            // Один SaveChangesAsync сохранит и бронь, и изменение AvailableSeats у evt (оба отслеживаются одним контекстом).
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             return booking;
         }
@@ -56,24 +63,14 @@ public sealed class BookingService : IBookingService
     }
 
     public Task<Booking?> GetBookingByIdAsync(Guid bookingId, CancellationToken cancellationToken = default)
-        => _context.Bookings.AsNoTracking()
-            .FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+        => _bookingRepository.GetByIdAsync(bookingId, cancellationToken);
 
     public async Task<IReadOnlyCollection<Booking>> GetPendingBookingsAsync(CancellationToken cancellationToken = default)
-    {
-        // Снимок pending-броней на текущий момент
-        var pending = await _context.Bookings.AsNoTracking()
-            .Where(b => b.Status == BookingStatus.Pending)
-            .OrderBy(b => b.CreatedAt)
-            .ToListAsync(cancellationToken);
-
-        return pending;
-    }
+        => await _bookingRepository.GetPendingAsync(cancellationToken);
 
     public async Task<bool> TryUpdateBookingAsync(Booking booking, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Bookings
-            .FirstOrDefaultAsync(b => b.Id == booking.Id, cancellationToken);
+        var existing = await _bookingRepository.GetByIdTrackedAsync(booking.Id, cancellationToken);
 
         if (existing is null)
             return false;
@@ -82,7 +79,7 @@ public sealed class BookingService : IBookingService
         existing.Status = booking.Status;
         existing.ProcessedAt = booking.ProcessedAt;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -91,8 +88,7 @@ public sealed class BookingService : IBookingService
         await _bookingSemaphore.WaitAsync(cancellationToken);
         try
         {
-            var booking = await _context.Bookings
-                .FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+            var booking = await _bookingRepository.GetByIdTrackedAsync(bookingId, cancellationToken);
 
             if (booking is null)
                 return false;
@@ -102,7 +98,7 @@ public sealed class BookingService : IBookingService
 
             booking.Confirm();
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
         finally
@@ -119,8 +115,7 @@ public sealed class BookingService : IBookingService
         await _bookingSemaphore.WaitAsync(cancellationToken);
         try
         {
-            var booking = await _context.Bookings
-                .FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+            var booking = await _bookingRepository.GetByIdTrackedAsync(bookingId, cancellationToken);
 
             if (booking is null)
                 return false;
@@ -129,8 +124,7 @@ public sealed class BookingService : IBookingService
                 return false;
 
             // событие могло быть удалено — тогда место вернуть некуда
-            var evt = await _context.Events
-                .FirstOrDefaultAsync(e => e.Id == booking.EventId, cancellationToken);
+            var evt = await _eventRepository.GetByIdTrackedAsync(booking.EventId, cancellationToken);
 
             if (evt is not null)
             {
@@ -139,7 +133,7 @@ public sealed class BookingService : IBookingService
 
             booking.Reject();
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             return true;
         }
         finally

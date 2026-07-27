@@ -93,11 +93,6 @@ appsettings.*.json
 !appsettings.json
 !appsettings.Development.json
 
-# EF Core
-**/Migrations/*.cs
-**/Migrations/*.Designer.cs
-# (Если вы хотите коммитить миграции — удалите две строки выше)
-
 # Logs
 *.log
 

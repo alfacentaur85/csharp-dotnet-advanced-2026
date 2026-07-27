@@ -1,10 +1,11 @@
 # EventService (ASP.NET Core Web API)
 
-Простой каркас сервиса событий с in-memory хранилищем, CRUD REST API, валидацией и Swagger.
+Простой каркас сервиса событий с хранилищем в PostgreSQL (EF Core, схема управляется миграциями), CRUD REST API, валидацией и Swagger.
 
 ## Требования
 - .NET SDK 8.0+
 - PostgreSQL
+- Docker — для запуска интеграционных тестов (см. раздел «Тесты»)
 
 ## Настройка строки подключения (PostgreSQL)
 
@@ -32,19 +33,39 @@ Linux/macOS:
 export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=event_service;Username=postgres;Password=postgres"
 ```
 
-### Автоматическое создание схемы БД
-При запуске приложения схема БД создаётся автоматически через EnsureCreated() (в Program.cs):
-```
+### Схема БД управляется миграциями EF Core
+
+Схема базы данных описывается миграциями EF Core (папка `EventServiceApi/DataAccess/Migrations`), а не создаётся "на лету" через `EnsureCreated()`. При запуске приложения все ещё не применённые миграции накатываются автоматически (в `Program.cs`):
+```csharp
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 ```
 
-### Тесты (EF Core InMemory)
+#### Инструмент dotnet-ef
 
-В тестах используется EF Core InMemory provider: AppDbContext настраивается через UseInMemoryDatabase(...) и поднимается через DI (ServiceCollection) с уникальным именем базы данных на тестовый класс, чтобы тесты не влияли друг на друга.
+Если `dotnet-ef` ещё не установлен глобально:
+```bash
+dotnet tool install --global dotnet-ef
+```
+
+#### Создание новой миграции
+
+После изменения моделей (`Event`, `Booking`) или конфигураций EF Core (`IEntityTypeConfiguration<T>`) создайте миграцию из корня репозитория:
+```bash
+dotnet ef migrations add <ИмяМиграции> --project EventServiceApi --startup-project EventServiceApi
+```
+
+#### Применение миграций к базе данных
+
+Накатить все не применённые миграции на БД, указанную в `ConnectionStrings:DefaultConnection`:
+```bash
+dotnet ef database update --project EventServiceApi --startup-project EventServiceApi
+```
+
+Вручную это делать не обязательно — то же самое произойдёт автоматически при старте приложения (`db.Database.Migrate()` в `Program.cs`).
 
 ## Запуск
 Из корня проекта:
@@ -201,9 +222,34 @@ Content-Type: application/json
 409 Conflict - при отсутствии мест
 
 ## Тесты
-Тесты написаны на xUnit в отдельном проекте (например, EventService.Tests).
 
-Запуск тестов из корня решения/репозитория:
+В решении два тестовых проекта:
+
+### Unit-тесты (EventService.Tests)
+
+Тесты написаны на xUnit и используют EF Core InMemory provider: `AppDbContext` настраивается через `UseInMemoryDatabase(...)` и поднимается через DI (`ServiceCollection`) с уникальным именем базы данных на тестовый класс, чтобы тесты не влияли друг на друга.
+
+```bash
+dotnet test EventService.Tests
+```
+
+### Интеграционные тесты (EventApi.IntegrationTests)
+
+Тесты репозиториев (`EventRepository`, `BookingRepository`) написаны на xUnit и запускаются против **реального PostgreSQL**, поднятого автоматически через [Testcontainers](https://dotnet.testcontainers.org/) — Docker-образ `postgres:16-alpine` стартует и останавливается самим тестовым прогоном, вручную поднимать контейнер (`docker compose up`) не нужно.
+
+**Требуется установленный и запущенный Docker** (Docker Desktop на Windows/macOS или Docker Engine на Linux) — без него тесты не смогут поднять контейнер и упадут при старте.
+
+Особенности:
+- один контейнер PostgreSQL используется всеми тестами прогона (xUnit collection fixture);
+- перед каждым тестом база приводится к чистому состоянию (`EnsureDeleted()` + `Migrate()`), поэтому тесты изолированы и не зависят от порядка запуска.
+
+```bash
+dotnet test EventApi.IntegrationTests
+```
+
+### Все тесты сразу
+
+Запуск из корня репозитория (потребует Docker для интеграционных тестов):
 
 ```bash
 dotnet test
@@ -214,27 +260,23 @@ dotnet test
 
 Как работает:
 
-1. Сервис с заданным интервалом (poll interval) опрашивает хранилище бронирований и получает список броней в статусе `Pending`.
+1. Сервис с заданным интервалом (poll interval) опрашивает через `IBookingService.GetPendingBookingsAsync` список броней в статусе `Pending` (данные читаются из PostgreSQL через `IBookingRepository`).
 
 2. Обработка pending-броней запускается **параллельно** (через `Task.WhenAll`), чтобы ожидание внешней системы не блокировало обработку других броней.
 
-3. Для каждой брони выполняется искусственная задержка `Task.Delay(2 секунды)`, имитирующая обращение к внешней системе (например, платёжный шлюз/CRM/сервис подтверждения).  
-   Важно: задержка выполняется **до входа в критическую секцию**, поэтому ожидание происходит параллельно.
+3. Для каждой брони выполняется искусственная задержка `Task.Delay(2 секунды)`, имитирующая обращение к внешней системе (например, платёжный шлюз/CRM/сервис подтверждения).
+   Важно: задержка выполняется **до** вызова `TryProcessPendingAsync`, поэтому ожидание происходит параллельно, а не последовательно внутри критической секции.
 
-4. После задержки бронь переводится в статус `Confirmed` (или `Rejected` в сценариях отклонения), и заполняется поле `ProcessedAt`.
+4. После задержки бронь переводится в статус `Confirmed` (метод `BookingService.TryProcessPendingAsync`) или `Rejected` (в сценариях отклонения/ошибки — `TryRejectPendingAsync`), заполняется поле `ProcessedAt`, изменения сохраняются в БД через `IUnitOfWork.SaveChangesAsync`.
 
 ### Синхронизация при фоновой обработке
 
-При обновлении статусов используется `SemaphoreSlim` (асинхронный аналог мьютекса), чтобы сериализовать критическую секцию записи/обновления состояния в условиях параллельной обработки.
+Обновление статуса брони (`BookingService.TryProcessPendingAsync` / `TryRejectPendingAsync`) сериализуется через `SemaphoreSlim` внутри `BookingService`, чтобы несколько параллельных обработок не применяли конфликтующие изменения к состоянию одной и той же брони/события.
 
-`SemaphoreSlim` используется вместо `lock`, потому что внутри обработки есть `await`, а `lock` нельзя безопасно удерживать вокруг асинхронного кода.
-
-4. При смене статуса заполняется поле ProcessedAt (время обработки).
-
-5. Обновлённая бронь сохраняется обратно в in-memory хранилище.
+`SemaphoreSlim` используется вместо `lock`, потому что внутри критической секции есть `await` (обращения к репозиторию и `SaveChangesAsync`), а `lock` нельзя безопасно удерживать вокруг асинхронного кода.
 
 #### Конкурентность и защита от повторной обработки
-Для предотвращения повторной обработки одной и той же брони используется атомарная операция обновления (метод TryProcessPendingAsync), которая переводит бронь из Pending в Confirmed только если она всё ещё находится в статусе Pending на момент обновления.
+Для предотвращения повторной обработки одной и той же брони `TryProcessPendingAsync`/`TryRejectPendingAsync` перед изменением статуса проверяют, что бронь всё ещё находится в статусе `Pending` — если статус уже сменился, обновление не выполняется и метод возвращает `false`.
 
 ## Пример полного сценария (Swagger walkthrough)
 1. Откройте Swagger UI
@@ -318,83 +360,44 @@ GET /bookings/{id}
 
 В проекте используются несколько примитивов синхронизации, чтобы корректно работать при параллельных запросах и фоновой обработке.
 
-### `lock` (Monitor)
-
-**Где:** `BookingService`
-
-поле:
-
-```csharp
-private readonly object _bookingLock = new();
-```
-и блок:
-
-```csharp
-lock (_bookingLock)
-{
-    // Get event -> TryReserveSeats -> create booking -> store booking
-}
-```
-Зачем нужен: защищает критическую секцию от гонок при создании брони. Без блокировки возможен овербукинг: два потока одновременно видят, что места есть, и оба создают бронь, в результате броней больше, чем мест.
-
-lock охватывает атомарную связку операций:
-
-- получение события;
-- проверка/уменьшение AvailableSeats (TryReserveSeats);
-- создание и сохранение брони.
-
-Почему lock, а не SemaphoreSlim: внутри секции нет await и I/O — код синхронный и быстрый. lock проще и дешевле по накладным расходам. SemaphoreSlim нужен в основном для асинхронных критических секций, где есть await.
-
 ### `lock` в `Event.TryReserveSeats()` и `Event.ReleaseSeats()`
-**Где:** Event, поле:
+
+**Где:** `Event`, поле:
+
 ```csharp
 private readonly object _seatsLock = new();
 ```
-Зачем нужен: делает операции изменения AvailableSeats потокобезопасными на уровне конкретного события:
+Зачем нужен: делает операции изменения `AvailableSeats` потокобезопасными на уровне конкретного экземпляра `Event`:
 
-TryReserveSeats проверяет и уменьшает AvailableSeats атомарно;
-ReleaseSeats увеличивает AvailableSeats атомарно и не даёт превысить TotalSeats.
-Это защищает от некорректных значений AvailableSeats при параллельных изменениях.
+- `TryReserveSeats` проверяет и уменьшает `AvailableSeats` атомарно;
+- `ReleaseSeats` увеличивает `AvailableSeats` атомарно и не даёт превысить `TotalSeats`.
 
-### `ConcurrentDictionary` как потокобезопасное хранилище
-**Где:**
-
-- EventService: ConcurrentDictionary<Guid, Event>
-- BookingService: ConcurrentDictionary<Guid, Booking>
-
-Зачем нужен: позволяет безопасно читать/добавлять/обновлять элементы из разных потоков без внешней блокировки на уровне коллекции.
-
-Дополнительно используются атомарные операции словаря:
-
-- TryAdd — безопасное добавление;
-- TryRemove — безопасное удаление;
-- TryUpdate — атомарное обновление по схеме compare-and-swap (CAS).
-
-### `CAS(Compare-And-Swap)-обновление` (TryUpdate)
-
-**Где:** 
-- BookingService.TryProcessPendingAsync
-
-Зачем нужно: гарантирует, что бронь будет обработана (переведена из Pending в Confirmed) только один раз, даже если несколько потоков/тасок пытаются обработать одну и ту же бронь одновременно.
-
-Логика:
-
-- читаем текущую бронь;
-- если она Pending, формируем обновлённую;
-- выполняем _storage.TryUpdate(id, updated, current) — обновление произойдёт только - если запись не изменилась между чтением и записью;
-- если не получилось — повторяем цикл.
+`lock` тут уместен, потому что внутри секции нет `await` — код синхронный и быстрый.
 
 ### `SemaphoreSlim`
-**Где:**
-- BookingProcessingBackgroundService
 
-поле:
+**Где:** `BookingService`, поле:
+
 ```csharp
-private readonly SemaphoreSlim _processingSemaphore = new(1, 1);
+private static readonly SemaphoreSlim _bookingSemaphore = new(1, 1);
 ```
 
-Зачем нужен: защищает критическую секцию при фоновой обработке бронирований, где используются await (например, имитация внешнего вызова, обновление статусов).
+Сериализует критические секции `CreateBookingAsync`, `TryProcessPendingAsync` и `TryRejectPendingAsync`, в которых состояние брони и события читается/изменяется через репозитории с последующим `IUnitOfWork.SaveChangesAsync` — то есть асинхронный код с `await`.
 
-Почему не lock: lock нельзя безопасно использовать вокруг кода с await, потому что await может “разорвать” выполнение и привести к долгому удержанию блокировки/дедлокам. SemaphoreSlim — асинхронный аналог мьютекса: позволяет await WaitAsync() и гарантированно освобождать ресурс в finally.
+Почему `SemaphoreSlim`, а не `lock`: `lock` нельзя безопасно удерживать вокруг кода с `await` (может привести к разрыву выполнения и дедлокам). `SemaphoreSlim` — асинхронный аналог мьютекса: позволяет `await WaitAsync()` и гарантированно освобождать ресурс в `finally`.
 
-Важно: задержка Task.Delay выполняется до захвата семафора, чтобы ожидание внешней системы происходило параллельно, а блокировка удерживалась только на время обновления состояния.
+В `BookingProcessingBackgroundService` задержка `Task.Delay` (имитация внешнего вызова) выполняется **до** вызова `TryProcessPendingAsync`, то есть до захвата семафора — ожидание для разных броней идёт параллельно, а семафор удерживается только на время самого обновления состояния.
+
+### Защита от повторной обработки одной и той же брони
+
+`TryProcessPendingAsync` и `TryRejectPendingAsync` внутри критической секции (под семафором) проверяют текущий статус брони и меняют его только если она всё ещё `Pending`:
+
+```csharp
+var booking = await _bookingRepository.GetByIdTrackedAsync(bookingId, cancellationToken);
+if (booking is null) return false;
+if (booking.Status != BookingStatus.Pending) return false;
+booking.Confirm(); // или booking.Reject()
+await _unitOfWork.SaveChangesAsync(cancellationToken);
+```
+
+Комбинация «семафор + проверка статуса перед изменением» гарантирует: даже если несколько задач одновременно попытаются обработать одну и ту же бронь, повторно применить `Confirm`/`Reject` к уже обработанной брони не получится.

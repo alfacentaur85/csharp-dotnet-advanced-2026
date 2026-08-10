@@ -2,4 +2,7 @@
   <Project Path="EventApi.IntegrationTests/EventApi.IntegrationTests.csproj" />
   <Project Path="EventService.Tests/EventService.Tests.csproj" />
   <Project Path="EventServiceApi/EventServiceApi.csproj" />
+  <Project Path="EventService.Domain/EventService.Domain.csproj" />
+  <Project Path="EventService.Application/EventService.Application.csproj" />
+  <Project Path="EventService.Infrastructure/EventService.Infrastructure.csproj" />
 </Solution>

@@ -1,11 +1,69 @@
 # EventService (ASP.NET Core Web API)
 
-Простой каркас сервиса событий с хранилищем в PostgreSQL (EF Core, схема управляется миграциями), CRUD REST API, валидацией и Swagger.
+Сервис событий с хранилищем в PostgreSQL (EF Core, схема управляется миграциями), CRUD REST API, валидацией и Swagger.
+
+Решение построено по слоистой (Clean Architecture-подобной) архитектуре: предметная область, бизнес-логика, инфраструктура и presentation разнесены по отдельным проектам с однонаправленными зависимостями.
 
 ## Требования
-- .NET SDK 8.0+
+- .NET SDK 10.0+
 - PostgreSQL
 - Docker — для запуска интеграционных тестов (см. раздел «Тесты»)
+
+## Структура решения и назначение слоёв
+
+```
+EventServiceApi.slnx
+├── EventService.Domain           — доменный слой
+├── EventService.Application      — слой бизнес-логики (use cases)
+├── EventService.Infrastructure   — слой инфраструктуры
+├── EventServiceApi               — presentation-слой (Web API, composition root)
+├── EventService.Tests            — unit-тесты (Application/Domain)
+└── EventApi.IntegrationTests     — интеграционные тесты (Infrastructure)
+```
+
+Направление зависимостей строго одностороннее — каждый слой ссылается только на слои левее себя:
+
+```
+EventServiceApi ──▶ EventService.Application ──▶ EventService.Domain
+       └────────────▶ EventService.Infrastructure ──▶ EventService.Application ──▶ EventService.Domain
+```
+
+`EventService.Domain` не зависит ни от одного другого проекта и не содержит ссылок на ASP.NET Core/EF Core. `EventService.Application` зависит только от `EventService.Domain` и ничего не знает про `EventService.Infrastructure`.
+
+### EventService.Domain
+
+Предметная область без привязки к технологиям (нет пакетов, нет `ProjectReference`):
+- **Entities** (`Entities/Event.cs`, `Entities/Booking.cs`) — доменные сущности с бизнес-инвариантами (например, `Event.TryReserveSeats`/`ReleaseSeats`, `Booking.Confirm`/`Reject`);
+- **Enums** (`Enums/BookingStatus.cs`) — доменные перечисления;
+- **Exceptions** (`Exceptions/NotFoundException.cs`, `Exceptions/NoAvailableSeatsException.cs`) — исключения, отражающие нарушение бизнес-правил.
+
+### EventService.Application
+
+Бизнес-логика (use cases) и абстракции портов, ссылается только на `EventService.Domain`:
+- **Interfaces** — интерфейсы сервисов (`IEventService`, `IBookingService`) и интерфейсы портов к инфраструктуре (`IEventRepository`, `IBookingRepository`, `IUnitOfWork`) — то, что Application ожидает от инфраструктуры;
+- **Services** — реализации use case'ов (`EventService`, `BookingService`);
+- **Dto** — объекты передачи данных между Presentation и Application (`EventCreateDto`, `EventUpdateDto`, `EventResponseDto`, `BookingResponseDto`, `PaginatedResult<T>`);
+- **Mappings** — маппинг между доменными сущностями и DTO (`BookingMappings`);
+- **DependencyInjection** — `ApplicationServiceCollectionExtensions.AddApplicationServices()` регистрирует use case-сервисы в DI-контейнере.
+
+### EventService.Infrastructure
+
+Реализации, зависящие от внешних технологий; ссылается на `EventService.Domain` и `EventService.Application`:
+- **DataAccess** — `AppDbContext`, EF Core-конфигурации сущностей (`Configurations/*`), реализации репозиториев (`Repositories/EventRepository.cs`, `Repositories/BookingRepository.cs`), `UnitOfWork`, миграции (`Migrations/*`);
+- **BackgroundServices** — `BookingProcessingBackgroundService`, адаптер к фоновой обработке броней;
+- **DependencyInjection** — `InfrastructureServiceCollectionExtensions.AddInfrastructureServices(...)` регистрирует `AppDbContext`, репозитории, `IUnitOfWork` и hosted-сервис.
+
+### EventServiceApi (Presentation)
+
+Тонкий Web API слой; ссылается на `EventService.Application` и `EventService.Infrastructure` только для того, чтобы собрать приложение в `Program.cs`:
+- **Controllers** — эндпоинты, которые парсят HTTP-запрос, вызывают сервис из Application и возвращают ответ; бизнес-логики не содержат;
+- **Middleware** — `ExceptionHandlingMiddleware`, глобальный обработчик исключений, маппящий доменные исключения в HTTP-статусы (`NotFoundException` → 404, `NoAvailableSeatsException` → 409 и т. д.);
+- **Program.cs** — composition root: настраивает веб-хост (контроллеры, Swagger, валидация) и регистрирует зависимости слоёв через `builder.Services.AddApplicationServices()` и `builder.Services.AddInfrastructureServices(connectionString)`, не дублируя логику регистрации.
+
+### Тестовые проекты
+
+- **EventService.Tests** — unit-тесты сервисов Application; поднимают DI-контейнер через `AddApplicationServices()`/`AddInfrastructureServices(...)` с EF Core InMemory provider;
+- **EventApi.IntegrationTests** — интеграционные тесты репозиториев Infrastructure против реального PostgreSQL (Testcontainers). Ссылаются на `EventService.Domain` и `EventService.Infrastructure`.
 
 ## Настройка строки подключения (PostgreSQL)
 
@@ -35,7 +93,7 @@ export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=e
 
 ### Схема БД управляется миграциями EF Core
 
-Схема базы данных описывается миграциями EF Core (папка `EventServiceApi/DataAccess/Migrations`), а не создаётся "на лету" через `EnsureCreated()`. При запуске приложения все ещё не применённые миграции накатываются автоматически (в `Program.cs`):
+Схема базы данных описывается миграциями EF Core (папка `EventService.Infrastructure/DataAccess/Migrations`), а не создаётся "на лету" через `EnsureCreated()`. При запуске приложения все ещё не применённые миграции накатываются автоматически (в `Program.cs`):
 ```csharp
 using (var scope = app.Services.CreateScope())
 {
@@ -53,26 +111,30 @@ dotnet tool install --global dotnet-ef
 
 #### Создание новой миграции
 
-После изменения моделей (`Event`, `Booking`) или конфигураций EF Core (`IEntityTypeConfiguration<T>`) создайте миграцию из корня репозитория:
+`AppDbContext`, конфигурации сущностей и сами миграции живут в `EventService.Infrastructure` (`DataAccess/`), а не в `EventServiceApi` — поэтому `dotnet ef` вызывается с двумя разными проектами:
+- `--project EventService.Infrastructure` — куда положить файл миграции (там же лежит `DbContext`);
+- `--startup-project EventServiceApi` — откуда брать конфигурацию (строку подключения, DI) для генерации миграции, так как сам `EventService.Infrastructure` не является исполняемым приложением.
+
+После изменения сущностей (`Event`, `Booking` в `EventService.Domain`) или конфигураций EF Core (`IEntityTypeConfiguration<T>` в `EventService.Infrastructure/DataAccess/Configurations`) создайте миграцию из корня репозитория:
 ```bash
-dotnet ef migrations add <ИмяМиграции> --project EventServiceApi --startup-project EventServiceApi
+dotnet ef migrations add <ИмяМиграции> --project EventService.Infrastructure --startup-project EventServiceApi
 ```
 
 #### Применение миграций к базе данных
 
 Накатить все не применённые миграции на БД, указанную в `ConnectionStrings:DefaultConnection`:
 ```bash
-dotnet ef database update --project EventServiceApi --startup-project EventServiceApi
+dotnet ef database update --project EventService.Infrastructure --startup-project EventServiceApi
 ```
 
 Вручную это делать не обязательно — то же самое произойдёт автоматически при старте приложения (`db.Database.Migrate()` в `Program.cs`).
 
 ## Запуск
-Из корня проекта:
+Решение разбито на несколько проектов, поэтому запускать нужно явно проект `EventServiceApi` (Presentation-слой, содержит `Program.cs`):
 
 ```bash
 dotnet restore
-dotnet run
+dotnet run --project EventServiceApi
 ```
 
 ## Swagger

@@ -1,6 +1,6 @@
-using EventServiceApi.DataAccess;
-using EventServiceApi.DataAccess.Repositories;
-using EventServiceApi.Models;
+using EventService.Infrastructure.DataAccess;
+using EventService.Infrastructure.DataAccess.Repositories;
+using EventService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 using EventApi.IntegrationTests.Fixtures;

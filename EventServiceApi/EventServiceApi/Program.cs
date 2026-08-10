@@ -1,11 +1,9 @@
-using EventServiceApi.Interfaces;
+using EventService.Application.DependencyInjection;
+using EventService.Infrastructure.DependencyInjection;
 using EventServiceApi.Middleware;
-using EventServiceApi.Services;
 using Microsoft.AspNetCore.Mvc;
-using EventServiceApi.DataAccess;
-using EventServiceApi.DataAccess.Repositories;
+using EventService.Infrastructure.DataAccess;
 using System.Reflection;
-using Npgsql.EntityFrameworkCore.PostgreSQL;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,19 +40,9 @@ builder.Services.AddSwaggerGen(options =>
         options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
 });
 
-/// DI-регистрация сервисов приложения
-builder.Services.AddDbContext<AppDbContext>(options => 
-  options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
-);
-
-builder.Services.AddScoped<IEventRepository, EventRepository>();
-builder.Services.AddScoped<IBookingRepository, BookingRepository>();
-builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-
-builder.Services.AddScoped<IEventService, EventService>();
-builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructureServices(builder.Configuration.GetConnectionString("DefaultConnection")!);
 builder.Services.AddTransient<ExceptionHandlingMiddleware>();
-builder.Services.AddHostedService<BookingProcessingBackgroundService>();
 
 var app = builder.Build();
 

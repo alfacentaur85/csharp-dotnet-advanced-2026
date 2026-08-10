@@ -1,4 +1,4 @@
-using EventServiceApi.Exceptions;
+using EventService.Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;

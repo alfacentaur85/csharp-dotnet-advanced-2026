@@ -1,7 +1,7 @@
 using EventApi.IntegrationTests.Fixtures;
-using EventServiceApi.DataAccess;
-using EventServiceApi.Enums;
-using EventServiceApi.Models;
+using EventService.Infrastructure.DataAccess;
+using EventService.Domain.Enums;
+using EventService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace EventApi.IntegrationTests;

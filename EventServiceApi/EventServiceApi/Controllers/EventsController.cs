@@ -54,28 +54,6 @@ public class EventsController : ControllerBase
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
     {
-        var errors = new Dictionary<string, string[]>();
-
-        if (page < 1)
-            errors["page"] = new[] { "page должен быть >= 1" };
-
-        if (pageSize < 1)
-            errors["pageSize"] = new[] { "pageSize должен быть >= 1" };
-
-        if (from.HasValue && to.HasValue && from.Value > to.Value)
-            errors["dateRange"] = new[] { "Дата начала события не может быть больше даты окончания события" };
-
-        if (errors.Count > 0)
-        {
-            return BadRequest(new ValidationProblemDetails(errors)
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = "Ошибки валидации.",
-                Instance = HttpContext.Request.Path
-            });
-        }
-
         var result = await _eventService.GetAllAsync(
             title: title,
             from: from,

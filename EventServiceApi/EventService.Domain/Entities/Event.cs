@@ -10,13 +10,11 @@ public class Event
     /// <summary>
     /// Идентификатор события.
     /// </summary>
-    [Required]
     public Guid Id { get; set; }
 
     /// <summary>
     /// Заголовок события.
     /// </summary>
-    [Required]
     public string Title { get; set; } = string.Empty;
 
     /// <summary>
@@ -27,19 +25,16 @@ public class Event
     /// <summary>
     /// Дата и время начала события.
     /// </summary>
-    [Required]
     public DateTime StartAt { get; set; }
 
     /// <summary>
     /// Дата и время окончания события.
     /// </summary>
-    [Required]
     public DateTime EndAt { get; set; }
 
     /// <summary>
     /// Общее количество мест на событии.
     /// </summary>
-    [Required]
     [Range(1, int.MaxValue)]
     public int TotalSeats { get; set; }
 

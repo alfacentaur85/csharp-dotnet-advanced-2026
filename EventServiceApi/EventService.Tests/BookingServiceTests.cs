@@ -1,8 +1,8 @@
-using EventServiceApi.DataAccess;
-using EventServiceApi.Enums;
-using EventServiceApi.Exceptions;
-using EventServiceApi.Interfaces;
-using EventServiceApi.Models;
+using EventService.Infrastructure.DataAccess;
+using EventService.Domain.Enums;
+using EventService.Domain.Exceptions;
+using EventService.Application.Interfaces;
+using EventService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 

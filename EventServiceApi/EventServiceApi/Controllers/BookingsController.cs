@@ -1,7 +1,7 @@
-using EventServiceApi.Dto;
-using EventServiceApi.Exceptions;
-using EventServiceApi.Interfaces;
-using EventServiceApi.Mappings;
+using EventService.Application.Dto;
+using EventService.Domain.Exceptions;
+using EventService.Application.Interfaces;
+using EventService.Application.Mappings;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EventServiceApi.Controllers;

@@ -23,7 +23,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EventServiceApi\EventServiceApi.csproj" />
+    <ProjectReference Include="..\EventService.Domain\EventService.Domain.csproj" />
+    <ProjectReference Include="..\EventService.Application\EventService.Application.csproj" />
+    <ProjectReference Include="..\EventService.Infrastructure\EventService.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

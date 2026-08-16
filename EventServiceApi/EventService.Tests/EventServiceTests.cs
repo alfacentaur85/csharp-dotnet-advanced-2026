@@ -1,6 +1,6 @@
 
-using EventServiceApi.Dto;
-using EventServiceApi.Interfaces;
+using EventService.Application.Dto;
+using EventService.Application.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel.DataAnnotations;
 

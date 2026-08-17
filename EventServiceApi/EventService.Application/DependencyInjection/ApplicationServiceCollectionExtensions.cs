@@ -11,6 +11,7 @@ public static class ApplicationServiceCollectionExtensions
     {
         services.AddScoped<IEventService, EventServiceImpl>();
         services.AddScoped<IBookingService, BookingService>();
+        services.AddScoped<IAuthService, AuthService>();
 
         return services;
     }

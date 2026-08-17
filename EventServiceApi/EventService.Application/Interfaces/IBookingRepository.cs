@@ -26,4 +26,14 @@ public interface IBookingRepository
     /// Добавить новую бронь в контекст.
     /// </summary>
     void Add(Booking booking);
+
+    /// <summary>
+    /// Удалить бронь из контекста.
+    /// </summary>
+    void Remove(Booking booking);
+
+    /// <summary>
+    /// Количество активных (Pending/Confirmed) броней пользователя.
+    /// </summary>
+    Task<int> CountActiveByUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }

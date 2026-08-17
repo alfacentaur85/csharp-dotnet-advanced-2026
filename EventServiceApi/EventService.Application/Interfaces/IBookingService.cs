@@ -1,11 +1,24 @@
 using EventService.Domain.Entities;
+using EventService.Domain.Enums;
 
 namespace EventService.Application.Interfaces;
 
 public interface IBookingService
 {
-    Task<Booking> CreateBookingAsync(Guid eventId, CancellationToken cancellationToken = default);
+    Task<Booking> CreateBookingAsync(Guid eventId, Guid userId, CancellationToken cancellationToken = default);
     Task<Booking?> GetBookingByIdAsync(Guid bookingId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Отменяет бронь. Пользователь может отменить только свою бронь, администратор — любую.
+    /// </summary>
+    /// <returns>false, если брони с таким id не существует.</returns>
+    Task<bool> CancelBookingAsync(Guid bookingId, Guid callerId, UserRole callerRole, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Безвозвратно удаляет бронь (только для администратора). Если бронь была активна — освобождает место.
+    /// </summary>
+    /// <returns>false, если брони с таким id не существует.</returns>
+    Task<bool> DeleteBookingAsync(Guid bookingId, CancellationToken cancellationToken = default);
 
     // для фоновой обработки
     Task<IReadOnlyCollection<Booking>> GetPendingBookingsAsync(CancellationToken cancellationToken = default);

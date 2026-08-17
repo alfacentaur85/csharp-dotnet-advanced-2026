@@ -18,6 +18,11 @@ public class BookingResponseDto
     public Guid EventId { get; set; }
 
     /// <summary>
+    /// Идентификатор пользователя, создавшего бронь.
+    /// </summary>
+    public Guid UserId { get; set; }
+
+    /// <summary>
     /// Текущий статус брони.
     /// </summary>
     public BookingStatus Status { get; set; }

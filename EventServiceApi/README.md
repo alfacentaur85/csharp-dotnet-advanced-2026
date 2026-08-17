@@ -141,6 +141,78 @@ dotnet run --project EventServiceApi
 В режиме Development доступен Swagger UI:
 https://localhost:7041/swagger/index.html
 
+## Аутентификация и авторизация (JWT)
+
+API защищено JWT bearer-аутентификацией: `Program.cs` подключает `AddAuthentication(...).AddJwtBearer(...)` и `AddAuthorization()`, конвейер использует `app.UseAuthentication()` / `app.UseAuthorization()`. Регистрация и вход (`/auth/register`, `/auth/login`) остаются публичными — токен, который они выдают, нужно передавать в заголовке `Authorization: Bearer <token>` для доступа к защищённым эндпоинтам.
+
+### Ролевая модель
+
+Роль пользователя описывается перечислением `UserRole` (`EventService.Domain/Enums/UserRole.cs`):
+- `User` (по умолчанию) — обычный пользователь;
+- `Admin` — администратор.
+
+Роль задаётся при регистрации (необязательное поле `role` в `POST /auth/register`, по умолчанию `User`; допустимо явно указать `Admin`, отдельного приглашения/подтверждения для этого не требуется) и записывается в клейм `ClaimTypes.Role` внутри JWT-токена (`IJwtTokenService.GenerateToken`).
+
+Разграничение прав по эндпоинтам:
+
+| Эндпоинт | Доступ |
+|---|---|
+| `GET /events`, `GET /events/{id}` | Публично (без токена) |
+| `POST /events`, `PUT /events/{id}`, `DELETE /events/{id}` | Только `Admin` |
+| `POST /events/{id}/book` | Любой аутентифицированный пользователь |
+| `GET /bookings/{id}` | Любой аутентифицированный пользователь |
+| `POST /bookings/{id}/cancel` | Владелец брони или `Admin` (проверяется в `BookingService.CancelBookingAsync` по `userId` из токена; при попытке отменить чужую бронь — 403) |
+| `DELETE /bookings/{id}` | Только `Admin` (безвозвратное удаление брони) |
+| `POST /auth/register`, `POST /auth/login` | Публично (без токена) |
+
+Без токена (или с истёкшим/невалидным токеном) защищённые эндпоинты возвращают `401 Unauthorized`; с валидным токеном, но недостаточной ролью — `403 Forbidden`.
+
+### Получение и использование JWT-токена через Swagger
+
+1. Откройте Swagger UI: https://localhost:7041/swagger/index.html
+2. Найдите раздел **Auth** → `POST /auth/register` → **Try it out** и отправьте тело запроса, например:
+   ```json
+   {
+     "login": "admin",
+     "password": "password123",
+     "role": "Admin"
+   }
+   ```
+   (поле `role` необязательно; чтобы получить обычного пользователя, не указывайте его или укажите `"User"`). Если логин уже зарегистрирован, используйте вместо этого `POST /auth/login` с тем же логином/паролем.
+3. В ответе (`201 Created` для `register` или `200 OK` для `login`) скопируйте значение поля `token` из тела `AuthResponseDto`.
+4. Нажмите кнопку **Authorize** (со значком замка) в правом верхнем углу страницы Swagger UI, вставьте скопированный токен в поле `Bearer` (без слова `Bearer` — Swagger добавит префикс сам) и нажмите **Authorize**, затем **Close**.
+5. После этого все последующие запросы, отправленные через **Try it out**, будут автоматически содержать заголовок `Authorization: Bearer <token>` — можно вызывать защищённые эндпоинты (например, `POST /events` под токеном с ролью `Admin`).
+
+### Настройка секрета JWT
+
+Параметры токена задаются в секции `Jwt` конфигурации (`appsettings.json`):
+```json
+{
+  "Jwt": {
+    "Secret": "JpF0syLQMR{cA48vlUO5zGjor%H8NQw4",
+    "Issuer": "EventServiceApi",
+    "Audience": "EventServiceApi",
+    "ExpiresInMinutes": 60
+  }
+}
+```
+- `Secret` — симметричный ключ (`SymmetricSecurityKey`), которым подписываются и валидируются токены;
+- `Issuer` / `Audience` — значения, которые проверяются при валидации токена (`ValidateIssuer`/`ValidateAudience`);
+- `ExpiresInMinutes` — время жизни выдаваемого токена в минутах.
+
+Как и строку подключения, секрет можно переопределить переменной окружения, не редактируя `appsettings.json`:
+
+Windows (PowerShell):
+```
+$env:Jwt__Secret="<строгий продовый секрет>"
+```
+Linux/macOS:
+```
+export Jwt__Secret="<строгий продовый секрет>"
+```
+
+**Важно:** значение `Secret`, закоммиченное в `appsettings.json`, — это ключ для локальной разработки, а не для продакшна. В продакшн-окружении обязательно задайте собственный длинный случайный секрет (например, сгенерированный `openssl rand -base64 48`) через переменную окружения или секрет-хранилище (Azure Key Vault, AWS Secrets Manager, Kubernetes Secret и т. п.), никогда не используя значение по умолчанию из репозитория — иначе любой, кто видел исходный код, сможет подделать валидный JWT-токен.
+
 ## GET /events — фильтрация
 Поддерживаются query-параметры фильтрации (все опциональные):
 

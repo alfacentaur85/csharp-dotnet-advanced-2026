@@ -47,8 +47,15 @@ public abstract class RepositoryTestBase : IAsyncLifetime
             endAt ?? DateTime.UtcNow.AddDays(1).AddHours(2),
             totalSeats);
 
+    protected static User MakeUser(
+        string login = "user",
+        string passwordHash = "hash",
+        UserRole role = UserRole.User)
+        => User.Create(login, passwordHash, role);
+
     protected static Booking MakeBooking(
         Guid eventId,
+        Guid userId,
         BookingStatus status = BookingStatus.Pending,
         DateTime? createdAt = null,
         DateTime? processedAt = null)
@@ -56,6 +63,7 @@ public abstract class RepositoryTestBase : IAsyncLifetime
         {
             Id = Guid.NewGuid(),
             EventId = eventId,
+            UserId = userId,
             Status = status,
             CreatedAt = createdAt ?? DateTime.UtcNow,
             ProcessedAt = processedAt

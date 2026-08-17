@@ -65,6 +65,36 @@ public sealed class ExceptionHandlingMiddleware : IMiddleware
                 title = "Conflict";
                 detail = nase.Message;
                 break;
+
+            case PastEventBookingException peb:
+                statusCode = StatusCodes.Status400BadRequest;
+                title = "Bad Request";
+                detail = peb.Message;
+                break;
+
+            case ActiveBookingsLimitExceededException able:
+                statusCode = StatusCodes.Status409Conflict;
+                title = "Conflict";
+                detail = able.Message;
+                break;
+
+            case ForbiddenOperationException fo:
+                statusCode = StatusCodes.Status403Forbidden;
+                title = "Forbidden";
+                detail = fo.Message;
+                break;
+
+            case LoginAlreadyExistsException lae:
+                statusCode = StatusCodes.Status409Conflict;
+                title = "Conflict";
+                detail = lae.Message;
+                break;
+
+            case InvalidCredentialsException ice:
+                statusCode = StatusCodes.Status401Unauthorized;
+                title = "Unauthorized";
+                detail = ice.Message;
+                break;
         }
 
         // Логирование: 5xx как Error, 4xx как Warning

@@ -1,6 +1,8 @@
 using EventService.Application.DependencyInjection;
+using EventService.Application.Interfaces;
 using EventService.Infrastructure.DataAccess;
 using EventService.Infrastructure.DependencyInjection;
+using EventService.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,6 +19,15 @@ public abstract class TestDiFixture : IDisposable
 
         services.AddInfrastructureServices(options => options.UseInMemoryDatabase(DbName));
         services.AddApplicationServices();
+
+        services.Configure<JwtOptions>(options =>
+        {
+            options.Secret = "test-secret-key-for-unit-tests-0123456789";
+            options.Issuer = "TestIssuer";
+            options.Audience = "TestAudience";
+            options.ExpiresInMinutes = 60;
+        });
+        services.AddScoped<IJwtTokenService, JwtTokenService>();
 
         ServiceProvider = services.BuildServiceProvider();
 

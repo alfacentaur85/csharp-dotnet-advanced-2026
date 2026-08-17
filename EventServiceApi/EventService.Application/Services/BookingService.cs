@@ -14,6 +14,8 @@ public sealed class BookingService : IBookingService
     private readonly IEventRepository _eventRepository;
     private readonly IUnitOfWork _unitOfWork;
 
+    private const int MaxActiveBookingsPerUser = 10;
+
     private static readonly SemaphoreSlim _bookingSemaphore = new(1, 1);
 
     public BookingService(
@@ -26,7 +28,7 @@ public sealed class BookingService : IBookingService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Booking> CreateBookingAsync(Guid eventId, CancellationToken cancellationToken = default)
+    public async Task<Booking> CreateBookingAsync(Guid eventId, Guid userId, CancellationToken cancellationToken = default)
     {
         await _bookingSemaphore.WaitAsync(cancellationToken);
         try
@@ -37,17 +39,16 @@ public sealed class BookingService : IBookingService
             if (evt is null)
                 throw new NotFoundException("Event not found.");
 
+            if (evt.StartAt <= DateTime.UtcNow)
+                throw new PastEventBookingException();
+
+            if (await _bookingRepository.CountActiveByUserAsync(userId, cancellationToken) >= MaxActiveBookingsPerUser)
+                throw new ActiveBookingsLimitExceededException();
+
             if (!evt.TryReserveSeats(1))
                 throw new NoAvailableSeatsException();
 
-            var booking = new Booking
-            {
-                Id = Guid.NewGuid(),
-                EventId = eventId,
-                Status = BookingStatus.Pending,
-                CreatedAt = DateTime.UtcNow,
-                ProcessedAt = null
-            };
+            var booking = Booking.Create(eventId, userId);
 
             _bookingRepository.Add(booking);
 
@@ -64,6 +65,71 @@ public sealed class BookingService : IBookingService
 
     public Task<Booking?> GetBookingByIdAsync(Guid bookingId, CancellationToken cancellationToken = default)
         => _bookingRepository.GetByIdAsync(bookingId, cancellationToken);
+
+    public async Task<bool> CancelBookingAsync(
+        Guid bookingId,
+        Guid callerId,
+        UserRole callerRole,
+        CancellationToken cancellationToken = default)
+    {
+        await _bookingSemaphore.WaitAsync(cancellationToken);
+        try
+        {
+            var booking = await _bookingRepository.GetByIdTrackedAsync(bookingId, cancellationToken);
+
+            if (booking is null)
+                return false;
+
+            if (callerRole != UserRole.Admin && booking.UserId != callerId)
+                throw new ForbiddenOperationException("Нельзя отменить чужую бронь.");
+
+            var wasActive = booking.Status is BookingStatus.Pending or BookingStatus.Confirmed;
+
+            booking.Cancel();
+
+            if (wasActive)
+            {
+                var evt = await _eventRepository.GetByIdTrackedAsync(booking.EventId, cancellationToken);
+                evt?.ReleaseSeats(1);
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        finally
+        {
+            _bookingSemaphore.Release();
+        }
+    }
+
+    public async Task<bool> DeleteBookingAsync(Guid bookingId, CancellationToken cancellationToken = default)
+    {
+        await _bookingSemaphore.WaitAsync(cancellationToken);
+        try
+        {
+            var booking = await _bookingRepository.GetByIdTrackedAsync(bookingId, cancellationToken);
+
+            if (booking is null)
+                return false;
+
+            var wasActive = booking.Status is BookingStatus.Pending or BookingStatus.Confirmed;
+
+            if (wasActive)
+            {
+                var evt = await _eventRepository.GetByIdTrackedAsync(booking.EventId, cancellationToken);
+                evt?.ReleaseSeats(1);
+            }
+
+            _bookingRepository.Remove(booking);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        finally
+        {
+            _bookingSemaphore.Release();
+        }
+    }
 
     public async Task<IReadOnlyCollection<Booking>> GetPendingBookingsAsync(CancellationToken cancellationToken = default)
         => await _bookingRepository.GetPendingAsync(cancellationToken);

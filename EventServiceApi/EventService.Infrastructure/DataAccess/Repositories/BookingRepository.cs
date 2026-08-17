@@ -32,4 +32,11 @@ public sealed class BookingRepository : IBookingRepository
             .ToListAsync(cancellationToken);
 
     public void Add(Booking booking) => _context.Bookings.Add(booking);
+
+    public void Remove(Booking booking) => _context.Bookings.Remove(booking);
+
+    public Task<int> CountActiveByUserAsync(Guid userId, CancellationToken cancellationToken = default)
+        => _context.Bookings.CountAsync(
+            b => b.UserId == userId && (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed),
+            cancellationToken);
 }

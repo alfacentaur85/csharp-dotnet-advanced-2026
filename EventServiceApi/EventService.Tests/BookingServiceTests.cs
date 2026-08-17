@@ -5,21 +5,26 @@ using EventService.Application.Interfaces;
 using EventService.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.ComponentModel.DataAnnotations;
 
 namespace EventServiceApi.Tests;
 
 public class BookingServiceTests : TestDiFixture
 {
-    private static Event CreateTestEvent(Guid id, int totalSeats = 10)
-        => new()
+    private static Event CreateTestEvent(Guid id, int totalSeats = 10, DateTime? startAt = null)
+    {
+        var start = startAt ?? new DateTime(2030, 06, 01, 10, 0, 0, DateTimeKind.Utc);
+
+        return new()
         {
             Id = id,
             Title = "Test",
-            StartAt = new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
-            EndAt = new DateTime(2026, 06, 01, 11, 0, 0, DateTimeKind.Utc),
+            StartAt = start,
+            EndAt = start.AddHours(1),
             TotalSeats = totalSeats,
             AvailableSeats = totalSeats
         };
+    }
 
     private async Task SeedEventAsync(Event evt, CancellationToken ct)
     {
@@ -61,7 +66,7 @@ public class BookingServiceTests : TestDiFixture
         using var scope = ServiceProvider.CreateScope();
         var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
 
-        var booking = await bookingService.CreateBookingAsync(eventId, ct);
+        var booking = await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
 
         Assert.NotEqual(Guid.Empty, booking.Id);
         Assert.Equal(eventId, booking.EventId);
@@ -87,9 +92,10 @@ public class BookingServiceTests : TestDiFixture
         using var scope = ServiceProvider.CreateScope();
         var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
 
-        var b1 = await bookingService.CreateBookingAsync(eventId, ct);
-        var b2 = await bookingService.CreateBookingAsync(eventId, ct);
-        var b3 = await bookingService.CreateBookingAsync(eventId, ct);
+        var b1 = await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
+        var b2 = await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
+        var b3 = await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
+
 
         Assert.NotEqual(b1.Id, b2.Id);
         Assert.NotEqual(b1.Id, b3.Id);
@@ -117,7 +123,7 @@ public class BookingServiceTests : TestDiFixture
         using (var scope = ServiceProvider.CreateScope())
         {
             var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-            var created = await bookingService.CreateBookingAsync(eventId, ct);
+            var created = await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
             bookingId = created.Id;
             createdAt = created.CreatedAt;
         }
@@ -162,7 +168,7 @@ public class BookingServiceTests : TestDiFixture
         using (var scope = ServiceProvider.CreateScope())
         {
             var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-            bookingId = (await bookingService.CreateBookingAsync(eventId, ct)).Id;
+            bookingId = (await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct)).Id;
         }
 
         using (var scope = ServiceProvider.CreateScope())
@@ -193,7 +199,7 @@ public class BookingServiceTests : TestDiFixture
         using (var scope = ServiceProvider.CreateScope())
         {
             var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-            bookingId = (await bookingService.CreateBookingAsync(eventId, ct)).Id;
+            bookingId = (await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct)).Id;
         }
 
         DateTime? processedAt1;
@@ -251,10 +257,10 @@ public class BookingServiceTests : TestDiFixture
         using (var scope = ServiceProvider.CreateScope())
         {
             var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-            await bookingService.CreateBookingAsync(eventId, ct);
+            await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
 
             await Assert.ThrowsAsync<NoAvailableSeatsException>(() =>
-                bookingService.CreateBookingAsync(eventId, ct));
+                bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct));
         }
 
         var evtFromDb = await LoadEventAsync(eventId, ct);
@@ -273,7 +279,7 @@ public class BookingServiceTests : TestDiFixture
         var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
-            bookingService.CreateBookingAsync(Guid.NewGuid(), ct));
+            bookingService.CreateBookingAsync(Guid.NewGuid(), Guid.NewGuid(), ct));
     }
 
     [Fact]
@@ -289,7 +295,7 @@ public class BookingServiceTests : TestDiFixture
         using (var scope = ServiceProvider.CreateScope())
         {
             var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-            bookingId = (await bookingService.CreateBookingAsync(eventId, ct)).Id;
+            bookingId = (await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct)).Id;
         }
 
         var evtAfterCreate = await LoadEventAsync(eventId, ct);
@@ -325,7 +331,7 @@ public class BookingServiceTests : TestDiFixture
         using (var scope = ServiceProvider.CreateScope())
         {
             var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-            firstId = (await bookingService.CreateBookingAsync(eventId, ct)).Id;
+            firstId = (await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct)).Id;
         }
 
         var evtAfterFirst = await LoadEventAsync(eventId, ct);
@@ -345,7 +351,7 @@ public class BookingServiceTests : TestDiFixture
         using (var scope = ServiceProvider.CreateScope())
         {
             var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-            secondId = (await bookingService.CreateBookingAsync(eventId, ct)).Id;
+            secondId = (await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct)).Id;
         }
 
         Assert.NotEqual(firstId, secondId);
@@ -372,7 +378,7 @@ public class BookingServiceTests : TestDiFixture
 
                 try
                 {
-                    var b = await bookingService.CreateBookingAsync(eventId, ct);
+                    var b = await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
                     return (Success: true, Booking: b, Error: (Exception?)null);
                 }
                 catch (Exception ex)
@@ -411,7 +417,7 @@ public class BookingServiceTests : TestDiFixture
             {
                 using var scope = ServiceProvider.CreateScope();
                 var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
-                return await bookingService.CreateBookingAsync(eventId, ct);
+                return await bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct);
             }, ct))
             .ToArray();
 
@@ -425,5 +431,248 @@ public class BookingServiceTests : TestDiFixture
 
         var bookingsCount = await CountBookingsForEventAsync(eventId, ct);
         Assert.Equal(seats, bookingsCount);
+    }
+
+    [Fact]
+    public async Task CreateBooking_ForPastEvent_ThrowsPastEventBookingException()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+
+        await SeedEventAsync(
+            CreateTestEvent(eventId, totalSeats: 3, startAt: new DateTime(2020, 01, 01, 10, 0, 0, DateTimeKind.Utc)),
+            ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        await Assert.ThrowsAsync<PastEventBookingException>(() =>
+            bookingService.CreateBookingAsync(eventId, Guid.NewGuid(), ct));
+    }
+
+    [Fact]
+    public async Task CreateBooking_WhenUserHasTenActiveBookings_ThrowsActiveBookingsLimitExceededException()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 20), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        for (var i = 0; i < 10; i++)
+        {
+            await bookingService.CreateBookingAsync(eventId, userId, ct);
+        }
+
+        await Assert.ThrowsAsync<ActiveBookingsLimitExceededException>(() =>
+            bookingService.CreateBookingAsync(eventId, userId, ct));
+    }
+
+    [Fact]
+    public async Task CreateBooking_ActiveBookingsLimit_IsPerUser_DoesNotAffectOtherUsers()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var userA = Guid.NewGuid();
+        var userB = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 20), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        for (var i = 0; i < 10; i++)
+        {
+            await bookingService.CreateBookingAsync(eventId, userA, ct);
+        }
+
+        await Assert.ThrowsAsync<ActiveBookingsLimitExceededException>(() =>
+            bookingService.CreateBookingAsync(eventId, userA, ct));
+
+        // лимит userA исчерпан, но userB должен спокойно забронировать
+        var bookingB = await bookingService.CreateBookingAsync(eventId, userB, ct);
+
+        Assert.NotEqual(Guid.Empty, bookingB.Id);
+        Assert.Equal(userB, bookingB.UserId);
+    }
+
+    [Fact]
+    public async Task CancelBooking_ByOwner_SetsCancelled_AndReleasesSeat()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 1), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var booking = await bookingService.CreateBookingAsync(eventId, userId, ct);
+
+        var cancelled = await bookingService.CancelBookingAsync(booking.Id, userId, UserRole.User, ct);
+        Assert.True(cancelled);
+
+        var loaded = await LoadBookingAsync(booking.Id, ct);
+        Assert.NotNull(loaded);
+        Assert.Equal(BookingStatus.Cancelled, loaded!.Status);
+        Assert.NotNull(loaded.ProcessedAt);
+
+        var evtFromDb = await LoadEventAsync(eventId, ct);
+        Assert.Equal(1, evtFromDb.AvailableSeats);
+    }
+
+    [Fact]
+    public async Task CancelBooking_ByAdmin_ForOtherUsersBooking_Succeeds()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var adminId = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 1), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var booking = await bookingService.CreateBookingAsync(eventId, ownerId, ct);
+
+        var cancelled = await bookingService.CancelBookingAsync(booking.Id, adminId, UserRole.Admin, ct);
+        Assert.True(cancelled);
+
+        var loaded = await LoadBookingAsync(booking.Id, ct);
+        Assert.NotNull(loaded);
+        Assert.Equal(BookingStatus.Cancelled, loaded!.Status);
+
+        var evtFromDb = await LoadEventAsync(eventId, ct);
+        Assert.Equal(1, evtFromDb.AvailableSeats);
+    }
+
+    [Fact]
+    public async Task CancelBooking_ByOtherUser_ThrowsForbiddenOperationException()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 1), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var booking = await bookingService.CreateBookingAsync(eventId, ownerId, ct);
+
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() =>
+            bookingService.CancelBookingAsync(booking.Id, otherUserId, UserRole.User, ct));
+
+        var loaded = await LoadBookingAsync(booking.Id, ct);
+        Assert.NotNull(loaded);
+        Assert.Equal(BookingStatus.Pending, loaded!.Status);
+    }
+
+    [Fact]
+    public async Task CancelBooking_AlreadyCancelledOrRejected_ThrowsValidationException()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 1), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var booking = await bookingService.CreateBookingAsync(eventId, userId, ct);
+
+        var cancelled = await bookingService.CancelBookingAsync(booking.Id, userId, UserRole.User, ct);
+        Assert.True(cancelled);
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            bookingService.CancelBookingAsync(booking.Id, userId, UserRole.User, ct));
+    }
+
+    [Fact]
+    public async Task CancelBooking_UnknownId_ReturnsFalse()
+    {
+        var ct = CancellationToken.None;
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var cancelled = await bookingService.CancelBookingAsync(Guid.NewGuid(), Guid.NewGuid(), UserRole.User, ct);
+
+        Assert.False(cancelled);
+    }
+
+    [Fact]
+    public async Task DeleteBooking_ForActiveBooking_RemovesIt_AndReleasesSeat()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 1), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var booking = await bookingService.CreateBookingAsync(eventId, userId, ct);
+
+        var evtAfterCreate = await LoadEventAsync(eventId, ct);
+        Assert.Equal(0, evtAfterCreate.AvailableSeats);
+
+        var deleted = await bookingService.DeleteBookingAsync(booking.Id, ct);
+        Assert.True(deleted);
+
+        var loaded = await LoadBookingAsync(booking.Id, ct);
+        Assert.Null(loaded);
+
+        var evtAfterDelete = await LoadEventAsync(eventId, ct);
+        Assert.Equal(1, evtAfterDelete.AvailableSeats);
+    }
+
+    [Fact]
+    public async Task DeleteBooking_ForCancelledBooking_RemovesIt_WithoutReleasingSeatAgain()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        await SeedEventAsync(CreateTestEvent(eventId, totalSeats: 1), ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var booking = await bookingService.CreateBookingAsync(eventId, userId, ct);
+        await bookingService.CancelBookingAsync(booking.Id, userId, UserRole.User, ct);
+
+        var evtAfterCancel = await LoadEventAsync(eventId, ct);
+        Assert.Equal(1, evtAfterCancel.AvailableSeats);
+
+        var deleted = await bookingService.DeleteBookingAsync(booking.Id, ct);
+        Assert.True(deleted);
+
+        var loaded = await LoadBookingAsync(booking.Id, ct);
+        Assert.Null(loaded);
+
+        var evtAfterDelete = await LoadEventAsync(eventId, ct);
+        Assert.Equal(1, evtAfterDelete.AvailableSeats);
+    }
+
+    [Fact]
+    public async Task DeleteBooking_UnknownId_ReturnsFalse()
+    {
+        var ct = CancellationToken.None;
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        var deleted = await bookingService.DeleteBookingAsync(Guid.NewGuid(), ct);
+
+        Assert.False(deleted);
     }
 }

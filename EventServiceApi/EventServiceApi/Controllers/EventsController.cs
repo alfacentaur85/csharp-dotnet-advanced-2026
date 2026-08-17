@@ -3,7 +3,9 @@ using EventService.Domain.Exceptions;
 using EventService.Application.Interfaces;
 using EventService.Application.Mappings;
 using EventService.Domain.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace EventServiceApi.Controllers;
 
@@ -93,6 +95,7 @@ public class EventsController : ControllerBase
     /// Создать мероприятие.
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(EventResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<EventResponseDto>> Create(
@@ -111,6 +114,7 @@ public class EventsController : ControllerBase
     /// Полностью обновить мероприятие по id.
     /// </summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -130,6 +134,7 @@ public class EventsController : ControllerBase
     /// Удалить мероприятие по id.
     /// </summary>
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(
@@ -147,6 +152,7 @@ public class EventsController : ControllerBase
     /// Создать бронь на событие.
     /// </summary>
     [HttpPost("{id:guid}/book")]
+    [Authorize]
     [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -154,12 +160,24 @@ public class EventsController : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var booking = await _bookingService.CreateBookingAsync(id, cancellationToken);
+        var userId = GetUserId();
+
+        var booking = await _bookingService.CreateBookingAsync(id, userId, cancellationToken);
 
         return AcceptedAtAction(
             actionName: nameof(BookingsController.GetById),
             controllerName: "Bookings",
             routeValues: new { id = booking.Id },
             value: booking.ToResponseDto());
+    }
+
+    private Guid GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (!Guid.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("User id claim is missing or invalid.");
+
+        return userId;
     }
 }

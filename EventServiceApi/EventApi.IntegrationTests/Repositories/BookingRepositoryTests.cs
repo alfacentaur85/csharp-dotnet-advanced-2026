@@ -20,7 +20,9 @@ public sealed class BookingRepositoryTests : RepositoryTestBase
 
         var evt = MakeEvent("Conference");
         context.Events.Add(evt);
-        var booking = MakeBooking(evt.Id);
+        var user = MakeUser();
+        context.Users.Add(user);
+        var booking = MakeBooking(evt.Id, user.Id);
         context.Bookings.Add(booking);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
@@ -51,7 +53,9 @@ public sealed class BookingRepositoryTests : RepositoryTestBase
 
         var evt = MakeEvent("Conference");
         context.Events.Add(evt);
-        var booking = MakeBooking(evt.Id);
+        var user = MakeUser();
+        context.Users.Add(user);
+        var booking = MakeBooking(evt.Id, user.Id);
         context.Bookings.Add(booking);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
@@ -82,11 +86,13 @@ public sealed class BookingRepositoryTests : RepositoryTestBase
 
         var evt = MakeEvent("Conference");
         context.Events.Add(evt);
+        var user = MakeUser();
+        context.Users.Add(user);
 
-        var older = MakeBooking(evt.Id, BookingStatus.Pending, createdAt: DateTime.UtcNow.AddMinutes(-10));
-        var newer = MakeBooking(evt.Id, BookingStatus.Pending, createdAt: DateTime.UtcNow.AddMinutes(-1));
-        var confirmed = MakeBooking(evt.Id, BookingStatus.Confirmed, createdAt: DateTime.UtcNow.AddMinutes(-5));
-        var rejected = MakeBooking(evt.Id, BookingStatus.Rejected, createdAt: DateTime.UtcNow.AddMinutes(-5));
+        var older = MakeBooking(evt.Id, user.Id, BookingStatus.Pending, createdAt: DateTime.UtcNow.AddMinutes(-10));
+        var newer = MakeBooking(evt.Id, user.Id, BookingStatus.Pending, createdAt: DateTime.UtcNow.AddMinutes(-1));
+        var confirmed = MakeBooking(evt.Id, user.Id, BookingStatus.Confirmed, createdAt: DateTime.UtcNow.AddMinutes(-5));
+        var rejected = MakeBooking(evt.Id, user.Id, BookingStatus.Rejected, createdAt: DateTime.UtcNow.AddMinutes(-5));
 
         context.Bookings.AddRange(newer, older, confirmed, rejected);
         await context.SaveChangesAsync();
@@ -105,7 +111,9 @@ public sealed class BookingRepositoryTests : RepositoryTestBase
 
         var evt = MakeEvent("Conference");
         context.Events.Add(evt);
-        context.Bookings.Add(MakeBooking(evt.Id, BookingStatus.Confirmed));
+        var user = MakeUser();
+        context.Users.Add(user);
+        context.Bookings.Add(MakeBooking(evt.Id, user.Id, BookingStatus.Confirmed));
         await context.SaveChangesAsync();
 
         var pending = await repository.GetPendingAsync();
@@ -119,12 +127,14 @@ public sealed class BookingRepositoryTests : RepositoryTestBase
         await using var writeContext = CreateContext();
         var evt = MakeEvent("Conference");
         writeContext.Events.Add(evt);
+        var user = MakeUser();
+        writeContext.Users.Add(user);
         await writeContext.SaveChangesAsync();
 
         var repository = new BookingRepository(writeContext);
         var unitOfWork = new UnitOfWork(writeContext);
 
-        var booking = MakeBooking(evt.Id, BookingStatus.Pending);
+        var booking = MakeBooking(evt.Id, user.Id, BookingStatus.Pending);
         repository.Add(booking);
         await unitOfWork.SaveChangesAsync();
 
@@ -142,7 +152,9 @@ public sealed class BookingRepositoryTests : RepositoryTestBase
         await using var writeContext = CreateContext();
         var evt = MakeEvent("Conference");
         writeContext.Events.Add(evt);
-        var booking = MakeBooking(evt.Id);
+        var user = MakeUser();
+        writeContext.Users.Add(user);
+        var booking = MakeBooking(evt.Id, user.Id);
         writeContext.Bookings.Add(booking);
         await writeContext.SaveChangesAsync();
         writeContext.ChangeTracker.Clear();

@@ -1,7 +1,9 @@
 using EventService.Domain.Enums;
 using EventService.Domain.Exceptions;
 using EventService.Application.Interfaces;
+using EventService.Application.Options;
 using EventService.Domain.Entities;
+using Microsoft.Extensions.Options;
 
 namespace EventService.Application.Services;
 
@@ -13,19 +15,20 @@ public sealed class BookingService : IBookingService
     private readonly IBookingRepository _bookingRepository;
     private readonly IEventRepository _eventRepository;
     private readonly IUnitOfWork _unitOfWork;
-
-    private const int MaxActiveBookingsPerUser = 10;
+    private readonly int _maxActiveBookingsPerUser;
 
     private static readonly SemaphoreSlim _bookingSemaphore = new(1, 1);
 
     public BookingService(
         IBookingRepository bookingRepository,
         IEventRepository eventRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IOptions<BookingOptions> options)
     {
         _bookingRepository = bookingRepository;
         _eventRepository = eventRepository;
         _unitOfWork = unitOfWork;
+        _maxActiveBookingsPerUser = options.Value.MaxActiveBookingsPerUser;
     }
 
     public async Task<Booking> CreateBookingAsync(Guid eventId, Guid userId, CancellationToken cancellationToken = default)
@@ -42,7 +45,7 @@ public sealed class BookingService : IBookingService
             if (evt.StartAt <= DateTime.UtcNow)
                 throw new PastEventBookingException();
 
-            if (await _bookingRepository.CountActiveByUserAsync(userId, cancellationToken) >= MaxActiveBookingsPerUser)
+            if (await _bookingRepository.CountActiveByUserAsync(userId, cancellationToken) >= _maxActiveBookingsPerUser)
                 throw new ActiveBookingsLimitExceededException();
 
             if (!evt.TryReserveSeats(1))
@@ -83,13 +86,17 @@ public sealed class BookingService : IBookingService
             if (callerRole != UserRole.Admin && booking.UserId != callerId)
                 throw new ForbiddenOperationException("Нельзя отменить чужую бронь.");
 
+            var evt = await _eventRepository.GetByIdTrackedAsync(booking.EventId, cancellationToken);
+
+            if (evt is not null && evt.StartAt <= DateTime.UtcNow)
+                throw new PastEventBookingException();
+
             var wasActive = booking.Status is BookingStatus.Pending or BookingStatus.Confirmed;
 
             booking.Cancel();
 
             if (wasActive)
             {
-                var evt = await _eventRepository.GetByIdTrackedAsync(booking.EventId, cancellationToken);
                 evt?.ReleaseSeats(1);
             }
 

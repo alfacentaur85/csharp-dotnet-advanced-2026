@@ -34,6 +34,14 @@ public class BookingServiceTests : TestDiFixture
         await db.SaveChangesAsync(ct);
     }
 
+    private async Task SeedBookingAsync(Booking booking, CancellationToken ct)
+    {
+        using var scope = ServiceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Bookings.Add(booking);
+        await db.SaveChangesAsync(ct);
+    }
+
     private async Task<Event> LoadEventAsync(Guid eventId, CancellationToken ct)
     {
         using var scope = ServiceProvider.CreateScope();
@@ -606,6 +614,40 @@ public class BookingServiceTests : TestDiFixture
         var cancelled = await bookingService.CancelBookingAsync(Guid.NewGuid(), Guid.NewGuid(), UserRole.User, ct);
 
         Assert.False(cancelled);
+    }
+
+    [Fact]
+    public async Task CancelBooking_ForEventThatAlreadyStarted_ThrowsPastEventBookingException()
+    {
+        var ct = CancellationToken.None;
+        var eventId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var bookingId = Guid.NewGuid();
+
+        var evt = CreateTestEvent(eventId, totalSeats: 1, startAt: new DateTime(2020, 01, 01, 10, 0, 0, DateTimeKind.Utc));
+        evt.AvailableSeats = 0; // место занято этой бронью
+        await SeedEventAsync(evt, ct);
+
+        await SeedBookingAsync(new Booking
+        {
+            Id = bookingId,
+            EventId = eventId,
+            UserId = userId,
+            Status = BookingStatus.Confirmed,
+            CreatedAt = DateTime.UtcNow
+        }, ct);
+
+        using var scope = ServiceProvider.CreateScope();
+        var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+
+        await Assert.ThrowsAsync<PastEventBookingException>(() =>
+            bookingService.CancelBookingAsync(bookingId, userId, UserRole.User, ct));
+
+        var loaded = await LoadBookingAsync(bookingId, ct);
+        Assert.Equal(BookingStatus.Confirmed, loaded!.Status);
+
+        var evtFromDb = await LoadEventAsync(eventId, ct);
+        Assert.Equal(0, evtFromDb.AvailableSeats);
     }
 
     [Fact]

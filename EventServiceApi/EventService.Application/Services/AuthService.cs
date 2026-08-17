@@ -48,7 +48,7 @@ public sealed class AuthService : IAuthService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var token = _jwtTokenService.GenerateToken(user.Id, user.Login, user.Role);
-            return new AuthResponseDto { Token = token };
+            return new AuthResponseDto { UserId = user.Id, Token = token };
         }
         finally
         {
@@ -64,6 +64,6 @@ public sealed class AuthService : IAuthService
             throw new InvalidCredentialsException("Неверный логин или пароль.");
 
         var token = _jwtTokenService.GenerateToken(user.Id, user.Login, user.Role);
-        return new AuthResponseDto { Token = token };
+        return new AuthResponseDto { UserId = user.Id, Token = token };
     }
 }

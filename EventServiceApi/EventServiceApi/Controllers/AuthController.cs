@@ -34,7 +34,7 @@ public class AuthController : ControllerBase
 
         var result = await _authService.RegisterAsync(dto.Login, dto.Password, role, cancellationToken);
 
-        return StatusCode(StatusCodes.Status201Created, result);
+        return CreatedAtAction(nameof(UsersController.GetById), "Users", new { id = result.UserId }, result);
     }
 
     /// <summary>

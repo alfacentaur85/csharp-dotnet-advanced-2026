@@ -30,12 +30,19 @@ public class BookingsController : ControllerBase
     [HttpGet("{id:guid}")]
     [Authorize]
     [ProducesResponseType(typeof(BookingResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BookingResponseDto>> GetById(Guid id)
     {
         var booking = await _bookingService.GetBookingByIdAsync(id);
         if (booking is null)
             throw new NotFoundException("Booking not found.");
+
+        var callerId = GetUserId();
+        var callerRole = GetUserRole();
+
+        if (booking.UserId != callerId && callerRole != UserRole.Admin)
+            throw new ForbiddenOperationException("Нельзя просматривать чужую бронь.");
 
         return Ok(booking.ToResponseDto());
     }

@@ -52,7 +52,7 @@ builder.Services.AddSwaggerGen(c =>
     c.OperationFilter<AuthorizeOperationFilter>();
 });
 
-builder.Services.AddApplicationServices();
+builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration.GetConnectionString("DefaultConnection")!, builder.Configuration);
 builder.Services.AddTransient<ExceptionHandlingMiddleware>();
 

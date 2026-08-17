@@ -5,5 +5,13 @@ namespace EventService.Application.Dto;
 /// </summary>
 public class AuthResponseDto
 {
+    /// <summary>
+    /// Идентификатор пользователя.
+    /// </summary>
+    public Guid UserId { get; set; }
+
+    /// <summary>
+    /// Токен пользователя.
+    /// </summary>
     public string Token { get; set; } = string.Empty;
 }

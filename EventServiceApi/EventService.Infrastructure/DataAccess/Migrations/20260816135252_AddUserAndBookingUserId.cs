@@ -8,16 +8,13 @@ namespace EventService.Infrastructure.DataAccess.Migrations
     /// <inheritdoc />
     public partial class AddUserAndBookingUserId : Migration
     {
+        // Id системного пользователя-заглушки, на которого мапятся брони,
+        // созданные до появления таблицы users (см. Up()).
+        private static readonly Guid LegacyBookingsSystemUserId = new("00000000-0000-0000-0000-000000000001");
+
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<Guid>(
-                name: "UserId",
-                table: "bookings",
-                type: "uuid",
-                nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
-
             migrationBuilder.CreateTable(
                 name: "users",
                 columns: table => new
@@ -33,15 +30,36 @@ namespace EventService.Infrastructure.DataAccess.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_bookings_UserId",
-                table: "bookings",
-                column: "UserId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_users_Login",
                 table: "users",
                 column: "Login",
                 unique: true);
+
+            // Системный пользователь должен существовать до того, как AddColumn ниже
+            // проставит его id как default всем уже существующим броням — иначе FK
+            // на непустой БД (например, проде) не сможет создаться.
+            migrationBuilder.InsertData(
+                table: "users",
+                columns: new[] { "Id", "Login", "PasswordHash", "Role" },
+                values: new object[]
+                {
+                    LegacyBookingsSystemUserId,
+                    "system.legacy-bookings",
+                    "SYSTEM_ACCOUNT_NO_PASSWORD_LOGIN_DISABLED",
+                    "User"
+                });
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "UserId",
+                table: "bookings",
+                type: "uuid",
+                nullable: false,
+                defaultValue: LegacyBookingsSystemUserId);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_bookings_UserId",
+                table: "bookings",
+                column: "UserId");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_bookings_users_UserId",

@@ -20,5 +20,9 @@ public sealed class UserRepository : IUserRepository
         => _context.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Login == login, cancellationToken);
 
+    public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        => _context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+
     public void Add(User user) => _context.Users.Add(user);
 }

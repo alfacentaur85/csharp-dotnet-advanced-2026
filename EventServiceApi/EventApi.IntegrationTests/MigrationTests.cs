@@ -2,6 +2,8 @@ using System.Data.Common;
 
 using EventApi.IntegrationTests.Fixtures;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace EventApi.IntegrationTests;
 
@@ -60,6 +62,71 @@ public sealed class MigrationTests : RepositoryTestBase
         Assert.Equal("events", reader.GetString(reader.GetOrdinal("referenced_table")));
         Assert.Equal("Id", reader.GetString(reader.GetOrdinal("referenced_column")));
         Assert.Equal("CASCADE", reader.GetString(reader.GetOrdinal("delete_rule")));
+    }
+
+    [Fact]
+    public async Task Migrate_AddUserAndBookingUserId_BackfillsExistingBookingsWithValidUser()
+    {
+        // Накатываем только InitialCreate, чтобы получить bookings без колонки UserId —
+        // так же, как на проде до применения AddUserAndBookingUserId.
+        await using (var context = CreateContext())
+        {
+            var migrator = context.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync("20260725160104_InitialCreate");
+        }
+
+        var eventId = Guid.NewGuid();
+        var bookingId = Guid.NewGuid();
+
+        await using (var context = CreateContext())
+        {
+            var connection = context.Database.GetDbConnection();
+            await connection.OpenAsync();
+
+            await using var insertEvent = connection.CreateCommand();
+            insertEvent.CommandText = """
+                INSERT INTO events ("Id", "Title", "StartAt", "EndAt", "TotalSeats", "AvailableSeats")
+                VALUES (@id, 'Legacy event', now() + interval '1 day', now() + interval '2 day', 10, 9);
+                """;
+            insertEvent.Parameters.Add(new Npgsql.NpgsqlParameter("id", eventId));
+            await insertEvent.ExecuteNonQueryAsync();
+
+            await using var insertBooking = connection.CreateCommand();
+            insertBooking.CommandText = """
+                INSERT INTO bookings ("Id", "EventId", "Status", "CreatedAt")
+                VALUES (@id, @eventId, 'Confirmed', now());
+                """;
+            insertBooking.Parameters.Add(new Npgsql.NpgsqlParameter("id", bookingId));
+            insertBooking.Parameters.Add(new Npgsql.NpgsqlParameter("eventId", eventId));
+            await insertBooking.ExecuteNonQueryAsync();
+        }
+
+        // Накатываем оставшиеся миграции на непустую таблицу bookings — раньше здесь падал FK.
+        await using (var context = CreateContext())
+        {
+            var migrator = context.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync();
+        }
+
+        await using (var context = CreateContext())
+        {
+            var connection = context.Database.GetDbConnection();
+            await connection.OpenAsync();
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT b."UserId"
+                FROM bookings b
+                JOIN users u ON u."Id" = b."UserId"
+                WHERE b."Id" = @id;
+                """;
+            command.Parameters.Add(new Npgsql.NpgsqlParameter("id", bookingId));
+
+            var userId = await command.ExecuteScalarAsync();
+
+            Assert.NotNull(userId);
+            Assert.NotEqual(Guid.Empty, (Guid)userId!);
+        }
     }
 
     private static async Task<List<string>> GetTableNamesAsync(DbConnection connection)

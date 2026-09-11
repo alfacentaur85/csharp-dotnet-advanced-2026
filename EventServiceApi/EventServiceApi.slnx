@@ -1,8 +1,24 @@
 <Solution>
-  <Project Path="EventApi.IntegrationTests/EventApi.IntegrationTests.csproj" />
-  <Project Path="EventService.Tests/EventService.Tests.csproj" />
-  <Project Path="EventServiceApi/EventServiceApi.csproj" />
-  <Project Path="EventService.Domain/EventService.Domain.csproj" />
-  <Project Path="EventService.Application/EventService.Application.csproj" />
-  <Project Path="EventService.Infrastructure/EventService.Infrastructure.csproj" />
+  <Project Path="Contracts/Contracts.csproj" />
+
+  <Project Path="Users.Domain/Users.Domain.csproj" />
+  <Project Path="Users.Application/Users.Application.csproj" />
+  <Project Path="Users.Infrastructure/Users.Infrastructure.csproj" />
+  <Project Path="Users.Api/Users.Api.csproj" />
+  <Project Path="Users.Tests/Users.Tests.csproj" />
+  <Project Path="Users.IntegrationTests/Users.IntegrationTests.csproj" />
+
+  <Project Path="Events.Domain/Events.Domain.csproj" />
+  <Project Path="Events.Application/Events.Application.csproj" />
+  <Project Path="Events.Infrastructure/Events.Infrastructure.csproj" />
+  <Project Path="Events.Api/Events.Api.csproj" />
+  <Project Path="Events.Tests/Events.Tests.csproj" />
+  <Project Path="Events.IntegrationTests/Events.IntegrationTests.csproj" />
+
+  <Project Path="Bookings.Domain/Bookings.Domain.csproj" />
+  <Project Path="Bookings.Application/Bookings.Application.csproj" />
+  <Project Path="Bookings.Infrastructure/Bookings.Infrastructure.csproj" />
+  <Project Path="Bookings.Api/Bookings.Api.csproj" />
+  <Project Path="Bookings.Tests/Bookings.Tests.csproj" />
+  <Project Path="Bookings.IntegrationTests/Bookings.IntegrationTests.csproj" />
 </Solution>

@@ -33,6 +33,7 @@ public static class InfrastructureServiceCollectionExtensions
     private static IServiceCollection AddInfrastructureCore(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<IEventRepository, EventRepository>();
+        services.AddScoped<IProcessedBookingEventStore, ProcessedBookingEventStore>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.Configure<KafkaConsumerOptions>(configuration.GetSection("Kafka"));

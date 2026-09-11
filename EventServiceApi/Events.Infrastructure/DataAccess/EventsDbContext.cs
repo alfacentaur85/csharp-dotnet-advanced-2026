@@ -12,6 +12,8 @@ public sealed class EventsDbContext : DbContext
 
     public DbSet<Event> Events => Set<Event>();
 
+    public DbSet<ProcessedBookingEvent> ProcessedBookingEvents => Set<ProcessedBookingEvent>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

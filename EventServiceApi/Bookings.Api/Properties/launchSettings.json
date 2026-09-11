@@ -1,0 +1,15 @@
+{
+  "profiles": {
+    "Bookings.Api": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "https://localhost:7043;http://localhost:5043"
+    }
+  },
+  "$schema": "https://json.schemastore.org/launchsettings.json"
+}

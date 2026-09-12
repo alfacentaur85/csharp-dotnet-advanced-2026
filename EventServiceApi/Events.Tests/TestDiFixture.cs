@@ -1,9 +1,11 @@
 using Events.Application.DependencyInjection;
+using Events.Application.Interfaces;
 using Events.Infrastructure.DataAccess;
 using Events.Infrastructure.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Events.Tests;
 
@@ -24,8 +26,11 @@ public abstract class TestDiFixture : IDisposable
 
         var services = new ServiceCollection();
 
+        services.AddLogging();
         services.AddInfrastructureServices(options => options.UseInMemoryDatabase(DbName), configuration);
         services.AddApplicationServices();
+
+        services.AddSingleton<ICacheService, NoOpCacheService>();
 
         ServiceProvider = services.BuildServiceProvider();
 

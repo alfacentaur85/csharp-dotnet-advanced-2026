@@ -1,22 +1,35 @@
 using System.ComponentModel.DataAnnotations;
+using Events.Application.Caching;
 using Events.Application.Dto;
 using Events.Application.Interfaces;
+using Events.Application.Options;
 using Events.Domain.Entities;
+using Microsoft.Extensions.Options;
 
 namespace Events.Application.Services;
 
 /// <summary>
 /// Реализация сервиса мероприятий (бизнес-логика; доступ к данным — через IEventRepository).
+///
+/// Кеширование (Cache-Aside)
 /// </summary>
 public sealed class EventService : IEventService
 {
     private readonly IEventRepository _eventRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ICacheService _cacheService;
+    private readonly CacheOptions _cacheOptions;
 
-    public EventService(IEventRepository eventRepository, IUnitOfWork unitOfWork)
+    public EventService(
+        IEventRepository eventRepository,
+        IUnitOfWork unitOfWork,
+        ICacheService cacheService,
+        IOptions<CacheOptions> cacheOptions)
     {
         _eventRepository = eventRepository;
         _unitOfWork = unitOfWork;
+        _cacheService = cacheService;
+        _cacheOptions = cacheOptions.Value;
     }
 
     public async Task<PaginatedResult<Event>> GetAllAsync(
@@ -44,8 +57,43 @@ public sealed class EventService : IEventService
         };
     }
 
-    public Task<Event?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
-        => _eventRepository.GetByIdAsync(id, cancellationToken);
+    public async Task<Event?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var cacheKey = EventCacheKeys.EventById(id);
+
+        var cached = await _cacheService.GetAsync<Event>(cacheKey, cancellationToken);
+        if (cached is not null)
+            return cached;
+
+        var evt = await _eventRepository.GetByIdAsync(id, cancellationToken);
+        if (evt is not null)
+        {
+            await _cacheService.SetAsync(
+                cacheKey,
+                evt,
+                TimeSpan.FromSeconds(_cacheOptions.EventTtlSeconds),
+                cancellationToken);
+        }
+
+        return evt;
+    }
+
+    public async Task<IReadOnlyList<Event>> GetTopSellingAsync(CancellationToken cancellationToken = default)
+    {
+        var cached = await _cacheService.GetAsync<List<Event>>(EventCacheKeys.Top10, cancellationToken);
+        if (cached is not null)
+            return cached;
+
+        var top = await _eventRepository.GetTopSellingAsync(10, cancellationToken);
+
+        await _cacheService.SetAsync(
+            EventCacheKeys.Top10,
+            top.ToList(),
+            TimeSpan.FromSeconds(_cacheOptions.TopEventsTtlSeconds),
+            cancellationToken);
+
+        return top;
+    }
 
     public async Task<Event> CreateAsync(EventCreateDto dto, CancellationToken cancellationToken = default)
     {
@@ -95,6 +143,10 @@ public sealed class EventService : IEventService
         existing.EndAt = dto.EndAt;
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Кеш инвалидируется только после успешного сохранения в БД: если выполнение оборвётся
+        // раньше, БД останется в актуальном состоянии, а устаревший кеш просто проживёт до TTL.
+        await _cacheService.RemoveAsync(EventCacheKeys.EventById(id), cancellationToken);
         return true;
     }
 
@@ -107,6 +159,8 @@ public sealed class EventService : IEventService
 
         _eventRepository.Remove(existing);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _cacheService.RemoveAsync(EventCacheKeys.EventById(id), cancellationToken);
         return true;
     }
 

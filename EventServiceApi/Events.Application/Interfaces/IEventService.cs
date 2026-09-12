@@ -57,4 +57,10 @@ public interface IEventService
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>True если удалено, иначе false.</returns>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Получить топ-10 мероприятий по проценту проданных мест
+    /// ((TotalSeats - AvailableSeats) / TotalSeats), по убыванию.
+    /// </summary>
+    Task<IReadOnlyList<Event>> GetTopSellingAsync(CancellationToken cancellationToken = default);
 }

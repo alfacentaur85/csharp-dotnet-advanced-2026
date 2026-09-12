@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Confluent.Kafka;
 using Contracts;
+using Events.Application.Caching;
 using Events.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -115,6 +116,7 @@ public sealed class BookingConfirmedConsumerBackgroundService : BackgroundServic
         var eventRepository = scope.ServiceProvider.GetRequiredService<IEventRepository>();
         var processedBookingEventStore = scope.ServiceProvider.GetRequiredService<IProcessedBookingEventStore>();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var cacheService = scope.ServiceProvider.GetRequiredService<ICacheService>();
 
         var eventEntity = await eventRepository.GetByIdTrackedAsync(evt.EventId, cancellationToken);
 
@@ -124,7 +126,8 @@ public sealed class BookingConfirmedConsumerBackgroundService : BackgroundServic
             return;
         }
 
-        if (!eventEntity.TryReserveSeats(evt.SeatsCount))
+        var reserved = eventEntity.TryReserveSeats(evt.SeatsCount);
+        if (!reserved)
         {
             _logger.LogWarning(
                 "Not enough available seats for EventId {EventId} to reserve {SeatsCount} seat(s). Skipping.",
@@ -139,12 +142,16 @@ public sealed class BookingConfirmedConsumerBackgroundService : BackgroundServic
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Кеш инвалидируется только после того, как изменение AvailableSeats гарантированно сохранено в БД, и только если места действительно были списаны
+            if (reserved)
+                await cacheService.RemoveAsync(EventCacheKeys.EventById(evt.EventId), cancellationToken);
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
             // BookingId уже был обработан ранее (дубликат из Kafka: повторная доставка после
             // рестарта/ребаланса или ретрай продюсера) — изменение AvailableSeats отменяется вместе
-            // с остальной транзакцией, повторного списания мест не происходит.
+            // с остальной транзакцией, повторного списания мест не происходит, кеш трогать не нужно.
             _logger.LogInformation(
                 "BookingConfirmedEvent {BookingId} for EventId {EventId} already processed, skipping duplicate.",
                 evt.BookingId,

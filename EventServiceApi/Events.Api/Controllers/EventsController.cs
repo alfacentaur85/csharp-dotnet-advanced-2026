@@ -70,6 +70,19 @@ public class EventsController : ControllerBase
     }
 
     /// <summary>
+    /// Получить топ-10 мероприятий по проценту проданных мест.
+    /// </summary>
+    [HttpGet("top")]
+    [ProducesResponseType(typeof(IReadOnlyList<EventResponseDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<EventResponseDto>>> GetTop(
+        CancellationToken cancellationToken = default)
+    {
+        var top = await _eventService.GetTopSellingAsync(cancellationToken);
+
+        return Ok(top.Select(ToResponseDto).ToList());
+    }
+
+    /// <summary>
     /// Получить мероприятие по id.
     /// </summary>
     /// <param name="id">Идентификатор мероприятия.</param>

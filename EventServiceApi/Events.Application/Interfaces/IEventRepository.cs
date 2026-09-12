@@ -29,6 +29,11 @@ public interface IEventRepository
     Task<Event?> GetByIdTrackedAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Получить топ мероприятий по проценту проданных мест: (TotalSeats - AvailableSeats) / TotalSeats, по убыванию.
+    /// </summary>
+    Task<IReadOnlyList<Event>> GetTopSellingAsync(int count, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Добавить новое мероприятие в контекст.
     /// </summary>
     void Add(Event evt);

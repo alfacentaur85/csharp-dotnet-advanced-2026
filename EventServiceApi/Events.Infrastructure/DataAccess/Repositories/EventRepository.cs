@@ -58,6 +58,12 @@ public sealed class EventRepository : IEventRepository
         => _context.Events
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<Event>> GetTopSellingAsync(int count, CancellationToken cancellationToken = default)
+        => await _context.Events.AsNoTracking()
+            .OrderByDescending(e => (double)(e.TotalSeats - e.AvailableSeats) / e.TotalSeats)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
     public void Add(Event evt) => _context.Events.Add(evt);
 
     public void Remove(Event evt) => _context.Events.Remove(evt);

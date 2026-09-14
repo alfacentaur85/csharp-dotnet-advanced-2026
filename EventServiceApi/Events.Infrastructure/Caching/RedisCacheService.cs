@@ -15,10 +15,10 @@ namespace Events.Infrastructure.Caching;
 /// </summary>
 public sealed class RedisCacheService : ICacheService
 {
-    private readonly IConnectionMultiplexer _connectionMultiplexer;
+    private readonly Lazy<IConnectionMultiplexer> _connectionMultiplexer;
     private readonly ILogger<RedisCacheService> _logger;
 
-    public RedisCacheService(IConnectionMultiplexer connectionMultiplexer, ILogger<RedisCacheService> logger)
+    public RedisCacheService(Lazy<IConnectionMultiplexer> connectionMultiplexer, ILogger<RedisCacheService> logger)
     {
         _connectionMultiplexer = connectionMultiplexer;
         _logger = logger;
@@ -28,7 +28,7 @@ public sealed class RedisCacheService : ICacheService
     {
         try
         {
-            var db = _connectionMultiplexer.GetDatabase();
+            var db = _connectionMultiplexer.Value.GetDatabase();
             RedisValue value = await db.StringGetAsync(key);
 
             if (!value.HasValue)
@@ -47,7 +47,7 @@ public sealed class RedisCacheService : ICacheService
     {
         try
         {
-            var db = _connectionMultiplexer.GetDatabase();
+            var db = _connectionMultiplexer.Value.GetDatabase();
             var json = JsonSerializer.Serialize(value);
             await db.StringSetAsync(key, json, ttl);
         }
@@ -61,7 +61,7 @@ public sealed class RedisCacheService : ICacheService
     {
         try
         {
-            var db = _connectionMultiplexer.GetDatabase();
+            var db = _connectionMultiplexer.Value.GetDatabase();
             await db.KeyDeleteAsync(key);
         }
         catch (Exception ex)

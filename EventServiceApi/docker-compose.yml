@@ -93,6 +93,9 @@ services:
   redis:
     image: redis:7.2-alpine
     container_name: eventapi-redis
+    ports:
+      # Внешний порт для подключения с хоста (например, из dotnet run локально).
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

@@ -112,11 +112,11 @@ Events использует Redis по паттерну **Cache-Aside** чере
 роль `Admin`; эндпоинты броней требуют аутентификации, идентификатор пользователя читается из
 claims токена.
 
-## Инфраструктура (Docker Compose)
+## Инфраструктура и сервисы (Docker Compose)
 
-`docker-compose.yml` поднимает только инфраструктуру — Kafka, Zookeeper, три базы Postgres и Redis
-(кеш сервиса Events). Сами сервисы (`Users.Api`, `Events.Api`, `Bookings.Api`) запускаются локально
-через `dotnet run`.
+`docker-compose.yml` поднимает как инфраструктуру (Kafka, Zookeeper, три базы Postgres, Redis), так
+и сами сервисы — `users-api`, `events-api`, `bookings-api` собираются из своих `Dockerfile` и
+подключаются к контейнерным БД/Kafka/Redis по именам сервисов (`users-db`, `kafka`, `redis` и т. д.).
 
 ```bash
 docker compose up -d
@@ -125,9 +125,20 @@ docker compose up -d
 Поднимаются:
 - `zookeeper`, `kafka` — брокер доступен с хоста на `localhost:9092`;
 - `users-db` (`localhost:5433`), `events-db` (`localhost:5434`), `bookings-db` (`localhost:5435`)
-  — Postgres, порты проброшены на хост, чтобы сервисы, запущенные через `dotnet run`, могли
-  подключиться напрямую;
-- `redis` — кеш сервиса Events, доступен с хоста на `localhost:6379` (см. раздел «Кеширование» выше).
+  — Postgres, порты проброшены на хост, чтобы к ним можно было подключиться напрямую (например,
+  клиентом БД) или из сервиса, запущенного локально через `dotnet run`;
+- `redis` — кеш сервиса Events, доступен с хоста на `localhost:6379` (см. раздел «Кеширование» выше);
+- `users-api` (`localhost:5041`), `events-api` (`localhost:5042`), `bookings-api` (`localhost:5043`)
+  — сами API-сервисы, каждый ждёт готовности своей БД (и Kafka/Redis, где нужно) через
+  `depends_on: condition: service_healthy` перед стартом.
+
+Для локальной разработки/дебага удобнее поднять через compose только инфраструктуру, а нужный
+сервис — запустить отдельно через `dotnet run` (тогда он подключается к контейнерам по портам,
+проброшенным на хост, — см. раздел «Запуск сервисов» ниже):
+
+```bash
+docker compose up -d zookeeper kafka users-db events-db bookings-db redis
+```
 
 ## Миграции EF Core
 
@@ -145,12 +156,18 @@ dotnet ef migrations add <Name> --project Bookings.Infrastructure --startup-proj
 
 ## Запуск сервисов
 
+Для локальной разработки (дебаг, хот-релоад) — поднять только инфраструктуру в Docker, а сервисы
+запустить через `dotnet run`:
+
 ```bash
-docker compose up -d                       # инфраструктура: Kafka + Zookeeper + 3×Postgres
+docker compose up -d zookeeper kafka users-db events-db bookings-db redis
 dotnet run --project Users.Api              # https://localhost:7041
 dotnet run --project Events.Api             # https://localhost:7042
 dotnet run --project Bookings.Api           # https://localhost:7043
 ```
+
+Либо поднять всё целиком через `docker compose up -d` (см. раздел выше) — тогда сервисы доступны
+по HTTP на `localhost:5041`/`5042`/`5043`.
 
 Swagger UI доступен в Development-окружении на `/swagger` каждого сервиса.
 

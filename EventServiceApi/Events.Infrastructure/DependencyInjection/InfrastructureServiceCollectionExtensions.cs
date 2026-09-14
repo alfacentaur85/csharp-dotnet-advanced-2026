@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
+using System.Threading;
 
 namespace Events.Infrastructure.DependencyInjection;
 
@@ -44,23 +45,28 @@ public static class InfrastructureServiceCollectionExtensions
         services.Configure<KafkaConsumerOptions>(configuration.GetSection("Kafka"));
         services.Configure<CacheOptions>(configuration.GetSection("Redis"));
 
-        services.AddSingleton<IConnectionMultiplexer>(sp =>
+        services.AddSingleton(sp =>
         {
             var cacheOptions = sp.GetRequiredService<IOptions<CacheOptions>>().Value;
             var logger = sp.GetRequiredService<ILogger<RedisCacheService>>();
 
-            var redisConfiguration = ConfigurationOptions.Parse(cacheOptions.ConnectionString);
-            redisConfiguration.AbortOnConnectFail = false;
+            // Подключение откладывается до первого реального обращения к кешу (см. RedisCacheService),
+            // чтобы недоступный на старте Redis не ронял регистрацию DI и старт хоста.
+            return new Lazy<IConnectionMultiplexer>(() =>
+            {
+                var redisConfiguration = ConfigurationOptions.Parse(cacheOptions.ConnectionString);
+                redisConfiguration.AbortOnConnectFail = false;
 
-            try
-            {
-                return ConnectionMultiplexer.Connect(redisConfiguration);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to initialize Redis connection to '{ConnectionString}'. Cache will be unavailable until Redis comes back.", cacheOptions.ConnectionString);
-                throw;
-            }
+                try
+                {
+                    return ConnectionMultiplexer.Connect(redisConfiguration);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to initialize Redis connection to '{ConnectionString}'. Cache will be unavailable until Redis comes back.", cacheOptions.ConnectionString);
+                    throw;
+                }
+            }, LazyThreadSafetyMode.ExecutionAndPublication);
         });
         services.AddSingleton<ICacheService, RedisCacheService>();
 

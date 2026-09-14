@@ -102,7 +102,8 @@ public sealed class BookingConfirmedConsumerBackgroundService : BackgroundServic
         }
     }
 
-    private async Task HandleMessageAsync(string rawMessage, CancellationToken cancellationToken)
+    // internal, а не private — чтобы Events.Tests мог прогнать сценарий обработчика без реального Kafka-консюмера (см. InternalsVisibleTo в .csproj).
+    internal async Task HandleMessageAsync(string rawMessage, CancellationToken cancellationToken)
     {
         var evt = JsonSerializer.Deserialize<BookingConfirmedEvent>(rawMessage);
 
